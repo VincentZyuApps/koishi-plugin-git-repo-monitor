@@ -232,13 +232,13 @@ export class PushScheduler {
 
     const bots = this.ctx.bots.filter(bot => bot.platform === platform)
     if (bots.length === 0) {
-      this.logger.warn('未找到 OneBot 适配器，无法发送合并转发')
+      this.logger.warn('未找到 OneBot 平台，无法发送合并转发')
       return
     }
 
     const bot = bots[0] as any
     if (!bot.internal?._request) {
-      this.logger.warn('当前 OneBot 适配器不支持 internal._request，无法发送合并转发')
+      this.logger.warn('当前 OneBot 适配器不支持 internal._request，发送合并转发失败捏')
       return
     }
 

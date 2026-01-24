@@ -90,9 +90,9 @@ export class GitHubProvider implements GitProvider {
     const params: Record<string, string> = { sha: branch }
     if (since) params.since = since
     
-    // 定义备用分支列表
-    const fallbackBranches = branch === 'main' ? ['master', 'develop', 'dev'] : 
-                             branch === 'master' ? ['main', 'develop', 'dev'] : []
+    // 只有 main/master 才有备用分支
+    const fallbackBranches = branch === 'main' ? ['master'] : 
+                             branch === 'master' ? ['main'] : []
     
     try {
       const commits = await this.fetch(`/repos/${owner}/${repo}/commits?${new URLSearchParams(params)}`)
@@ -108,34 +108,41 @@ export class GitHubProvider implements GitProvider {
       }))
     } catch (error: any) {
       // 如果是 404 错误，尝试备用分支
-      if (error.response?.status === 404 && fallbackBranches.length > 0) {
-        for (const fallbackBranch of fallbackBranches) {
-          try {
-            this.ctx.logger('git-monitor').warn(`⚠️ 分支 "${branch}" 不存在，尝试 "${fallbackBranch}": ${owner}/${repo}`)
-            const fallbackParams: Record<string, string> = { sha: fallbackBranch }
-            if (since) fallbackParams.since = since
-            
-            const commits = await this.fetch(`/repos/${owner}/${repo}/commits?${new URLSearchParams(fallbackParams)}`)
-            
-            this.ctx.logger('git-monitor').success(`✅ 使用备用分支 "${fallbackBranch}": ${owner}/${repo}`)
-            return commits.map((c: any) => ({
-              sha: c.sha,
-              shortSha: c.sha.substring(0, 7),
-              message: c.commit.message,
-              author: c.commit.author.name,
-              authorEmail: c.commit.author.email,
-              date: new Date(c.commit.author.date),
-              url: c.html_url,
-            }))
-          } catch (fallbackError: any) {
-            // 继续尝试下一个分支
-            continue
+      if (error.response?.status === 404) {
+        if (fallbackBranches.length > 0) {
+          for (const fallbackBranch of fallbackBranches) {
+            try {
+              this.ctx.logger('git-monitor').warn(`⚠️ 分支 "${branch}" 不存在，尝试 "${fallbackBranch}": ${owner}/${repo}`)
+              const fallbackParams: Record<string, string> = { sha: fallbackBranch }
+              if (since) fallbackParams.since = since
+              
+              const commits = await this.fetch(`/repos/${owner}/${repo}/commits?${new URLSearchParams(fallbackParams)}`)
+              
+              this.ctx.logger('git-monitor').success(`✅ 使用备用分支 "${fallbackBranch}": ${owner}/${repo}`)
+              return commits.map((c: any) => ({
+                sha: c.sha,
+                shortSha: c.sha.substring(0, 7),
+                message: c.commit.message,
+                author: c.commit.author.name,
+                authorEmail: c.commit.author.email,
+                date: new Date(c.commit.author.date),
+                url: c.html_url,
+              }))
+            } catch (fallbackError: any) {
+              // 继续尝试下一个分支
+              continue
+            }
           }
+          // main/master 都失败了
+          const errorMsg = `分支 "${branch}" 和备用分支 "${fallbackBranches[0]}" 均不存在`
+          this.ctx.logger('git-monitor').error(`❌ ${errorMsg}: ${owner}/${repo}`)
+          throw new Error(errorMsg)
+        } else {
+          // 用户配置的不是 main/master，直接报错
+          const errorMsg = `分支 "${branch}" 不存在（仅 main/master 支持自动回退）`
+          this.ctx.logger('git-monitor').error(`❌ ${errorMsg}: ${owner}/${repo}`)
+          throw new Error(errorMsg)
         }
-        // 所有备用分支都失败，抛出友好的错误
-        const errorMsg = `分支 "${branch}" 不存在，且备用分支 [${fallbackBranches.join(', ')}] 均不可用`
-        this.ctx.logger('git-monitor').error(`❌ ${errorMsg}: ${owner}/${repo}`)
-        throw new Error(errorMsg)
       }
       
       // 其他错误，格式化输出
@@ -202,30 +209,42 @@ export class GiteeProvider implements GitProvider {
     } catch (error: any) {
       // 如果是 404 错误，尝试回退到其他常见分支
       if (error.response?.status === 404) {
-        const fallbackBranches = branch === 'main' ? ['master', 'develop', 'dev'] : 
-                                 branch === 'master' ? ['main', 'develop', 'dev'] : []
+        // 只有 main/master 才有备用分支
+        const fallbackBranches = branch === 'main' ? ['master'] : 
+                                 branch === 'master' ? ['main'] : []
         
-        for (const fallbackBranch of fallbackBranches) {
-          try {
-            this.ctx.logger('git-monitor').warn(`⚠️ 分支 "${branch}" 不存在，尝试 "${fallbackBranch}": ${owner}/${repo}`)
-            const fallbackParams: Record<string, string> = { sha: fallbackBranch }
-            if (since) fallbackParams.since = since
-            
-            const commits = await this.fetch(`/repos/${owner}/${repo}/commits?${new URLSearchParams(fallbackParams)}`)
-            
-            this.ctx.logger('git-monitor').success(`✅ 使用备用分支 "${fallbackBranch}": ${owner}/${repo}`)
-            return commits.map((c: any) => ({
-              sha: c.sha,
-              shortSha: c.sha.substring(0, 7),
-              message: c.commit.message,
-              author: c.commit.author.name,
-              authorEmail: c.commit.author.email,
-              date: new Date(c.commit.author.date),
-              url: c.html_url,
-            }))
-          } catch (fallbackError: any) {
-            continue // 尝试下一个分支
+        if (fallbackBranches.length > 0) {
+          for (const fallbackBranch of fallbackBranches) {
+            try {
+              this.ctx.logger('git-monitor').warn(`⚠️ 分支 "${branch}" 不存在，尝试 "${fallbackBranch}": ${owner}/${repo}`)
+              const fallbackParams: Record<string, string> = { sha: fallbackBranch }
+              if (since) fallbackParams.since = since
+              
+              const commits = await this.fetch(`/repos/${owner}/${repo}/commits?${new URLSearchParams(fallbackParams)}`)
+              
+              this.ctx.logger('git-monitor').success(`✅ 使用备用分支 "${fallbackBranch}": ${owner}/${repo}`)
+              return commits.map((c: any) => ({
+                sha: c.sha,
+                shortSha: c.sha.substring(0, 7),
+                message: c.commit.message,
+                author: c.commit.author.name,
+                authorEmail: c.commit.author.email,
+                date: new Date(c.commit.author.date),
+                url: c.html_url,
+              }))
+            } catch (fallbackError: any) {
+              continue // 尝试下一个分支
+            }
           }
+          // main/master 都失败了
+          const errorMsg = `分支 "${branch}" 和备用分支 "${fallbackBranches[0]}" 均不存在`
+          this.ctx.logger('git-monitor').error(`❌ ${errorMsg}: ${owner}/${repo}`)
+          throw new Error(errorMsg)
+        } else {
+          // 用户配置的不是 main/master，直接报错
+          const errorMsg = `分支 "${branch}" 不存在（仅 main/master 支持自动回退）`
+          this.ctx.logger('git-monitor').error(`❌ ${errorMsg}: ${owner}/${repo}`)
+          throw new Error(errorMsg)
         }
       }
       

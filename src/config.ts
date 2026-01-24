@@ -142,7 +142,82 @@ export const Config: Schema<Config> = Schema.intersect([
   Schema.object({
     monitorGroups: Schema.array(MonitorGroupSchema)
       .role('table')
-      .default([])
+      .default([
+        {
+          name: 'qwq',
+          pushTargets: [
+            { name: 'qwq', platform: 'onebot', channelId: '259248174', enabled: true },
+          ],
+          repos: [
+            // 操作系统内核
+            { url: 'https://github.com/torvalds/linux', branch: 'master', type: 'commits' },
+            { url: 'https://github.com/freebsd/freebsd-src', branch: 'main', type: 'commits' },
+            // 编程语言 & 运行时
+            { url: 'https://github.com/python/cpython', branch: 'main', type: 'commits' },
+            { url: 'https://github.com/nodejs/node', branch: 'main', type: 'commits' },
+            { url: 'https://github.com/rust-lang/rust', branch: 'master', type: 'commits' },
+            { url: 'https://github.com/golang/go', branch: 'master', type: 'commits' },
+            { url: 'https://github.com/openjdk/jdk', branch: 'master', type: 'commits' },
+            { url: 'https://github.com/apple/swift', branch: 'main', type: 'commits' },
+            { url: 'https://github.com/JetBrains/kotlin', branch: 'master', type: 'commits' },
+            { url: 'https://github.com/ziglang/zig', branch: 'master', type: 'commits' },
+            { url: 'https://github.com/denoland/deno', branch: 'main', type: 'commits' },
+            { url: 'https://github.com/oven-sh/bun', branch: 'main', type: 'commits' },
+            { url: 'https://github.com/dotnet/runtime', branch: 'main', type: 'commits' },
+            { url: 'https://github.com/ruby/ruby', branch: 'master', type: 'commits' },
+            { url: 'https://github.com/php/php-src', branch: 'master', type: 'commits' },
+            { url: 'https://github.com/elixir-lang/elixir', branch: 'main', type: 'commits' },
+            // 编译器基础设施
+            { url: 'https://github.com/llvm/llvm-project', branch: 'main', type: 'commits' },
+            { url: 'https://github.com/gcc-mirror/gcc', branch: 'master', type: 'commits' },
+            // 浏览器 & 渲染引擎
+            { url: 'https://github.com/nicotine-plus/nicotine-plus', branch: 'main', type: 'commits' },
+            // 前端框架 & 工具
+            { url: 'https://github.com/microsoft/TypeScript', branch: 'main', type: 'commits' },
+            { url: 'https://github.com/microsoft/vscode', branch: 'main', type: 'commits' },
+            { url: 'https://github.com/vuejs/core', branch: 'main', type: 'commits' },
+            { url: 'https://github.com/facebook/react', branch: 'main', type: 'commits' },
+            { url: 'https://github.com/angular/angular', branch: 'main', type: 'commits' },
+            { url: 'https://github.com/sveltejs/svelte', branch: 'main', type: 'commits' },
+            { url: 'https://github.com/vercel/next.js', branch: 'canary', type: 'commits' },
+            { url: 'https://github.com/vitejs/vite', branch: 'main', type: 'commits' },
+            { url: 'https://github.com/webpack/webpack', branch: 'main', type: 'commits' },
+            // 容器 & 云原生
+            { url: 'https://github.com/docker/compose', branch: 'main', type: 'commits' },
+            { url: 'https://github.com/docker/cli', branch: 'master', type: 'commits' },
+            { url: 'https://github.com/moby/moby', branch: 'master', type: 'commits' },
+            { url: 'https://github.com/kubernetes/kubernetes', branch: 'master', type: 'commits' },
+            { url: 'https://github.com/containerd/containerd', branch: 'main', type: 'commits' },
+            { url: 'https://github.com/opencontainers/runc', branch: 'main', type: 'commits' },
+            { url: 'https://github.com/helm/helm', branch: 'main', type: 'commits' },
+            { url: 'https://github.com/prometheus/prometheus', branch: 'main', type: 'commits' },
+            { url: 'https://github.com/grafana/grafana', branch: 'main', type: 'commits' },
+            // 数据库
+            { url: 'https://github.com/postgres/postgres', branch: 'master', type: 'commits' },
+            { url: 'https://github.com/redis/redis', branch: 'unstable', type: 'commits' },
+            { url: 'https://github.com/sqlite/sqlite', branch: 'master', type: 'commits' },
+            { url: 'https://github.com/mongodb/mongo', branch: 'master', type: 'commits' },
+            { url: 'https://github.com/elastic/elasticsearch', branch: 'main', type: 'commits' },
+            { url: 'https://github.com/cockroachdb/cockroach', branch: 'master', type: 'commits' },
+            { url: 'https://github.com/mysql/mysql-server', branch: 'trunk', type: 'commits' },
+            // 基础工具
+            { url: 'https://github.com/git/git', branch: 'master', type: 'commits' },
+            { url: 'https://github.com/curl/curl', branch: 'master', type: 'commits' },
+            { url: 'https://github.com/FFmpeg/FFmpeg', branch: 'master', type: 'commits' },
+            { url: 'https://github.com/nginx/nginx', branch: 'master', type: 'commits' },
+            { url: 'https://github.com/openssl/openssl', branch: 'master', type: 'commits' },
+            { url: 'https://github.com/systemd/systemd', branch: 'main', type: 'commits' },
+            // AI & ML
+            { url: 'https://github.com/tensorflow/tensorflow', branch: 'master', type: 'commits' },
+            { url: 'https://github.com/pytorch/pytorch', branch: 'main', type: 'commits' },
+            { url: 'https://github.com/huggingface/transformers', branch: 'main', type: 'commits' },
+            { url: 'https://github.com/ggerganov/llama.cpp', branch: 'master', type: 'commits' },
+          ],
+          pollCron: '*/10 * * * *',
+          pushCron: '0 */2 * * *',
+          enabled: true,
+        },
+      ])
       .description('监控组列表'),
   }).description('监控配置'),
 
@@ -178,10 +253,10 @@ export const Config: Schema<Config> = Schema.intersect([
 
   Schema.object({
     passiveOutputModes: createOutputModeSchema(['text', 'puppeteer-image', 'typst-image', 'forward'])
-      .default(['typst-image'])
+      .default(['puppeteer-image', 'forward'])
       .description('被动消息触发：定时推送时的输出形式（可多选）'),
     activeOutputModes: createOutputModeSchema(['text', 'puppeteer-image', 'typst-image', 'forward'])
-      .default(['typst-image'])
+      .default(['puppeteer-image', 'forward'])
       .description('主动推送触发：手动指令推送时的输出形式（可多选）'),
   }).description('输出形式配置（可选依赖：puppeteer / to-image-service + w-node / OneBot）'),
 
