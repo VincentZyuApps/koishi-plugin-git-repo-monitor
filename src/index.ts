@@ -1,22 +1,24 @@
 import { Context } from 'koishi'
+import fs from 'node:fs'
 import { Config } from './config'
 import { RepoState, PushRecord } from './types'
 import { GitService } from './services/git'
-import { TypstRenderer } from './services/renderer'
+import { TypstRenderer } from './services/renderer-typst'
 import { PollScheduler } from './scheduler/poller'
 import { PushScheduler } from './scheduler/pusher'
 import { StorageManager } from './utils/storage'
 
 // 导入类型声明
-import {} from 'koishi-plugin-typst-to-image-service'
 import {} from 'koishi-plugin-to-image-service'
+import {} from 'koishi-plugin-w-node'
+import {} from 'koishi-plugin-puppeteer'
 
 export const name = 'git-repo-monitor'
 
 // 声明插件依赖的服务
 export const inject = {
-  required: ['database', 'typstToImageService', 'toImageService'],
-  optional: ['http'],
+  required: ['database'],
+  optional: ['http', 'toImageService', 'node', 'puppeteer'],
 }
 
 export { Config }
@@ -30,9 +32,13 @@ export const usage = `
 
 必须先安装并启用以下插件：
 
-- **typst-to-image-service** - Typst 渲染服务
-- **to-image-service** - 图片转换服务
-- **w-node** - Node.js 模块加载支持
+- **database** - 数据库服务
+
+可选依赖（按需使用）：
+
+- **to-image-service + w-node** - Typst 图片渲染
+- **puppeteer** - Puppeteer 图片渲染
+- **onebot** - 合并转发（forward）
 
 ### 🎯 功能特性
 
@@ -103,9 +109,44 @@ export function apply(ctx: Context, config: Config) {
   // ============ 初始化服务 ============
   const gitService = new GitService(ctx, config, config.githubToken, config.giteeToken)
   const storage = new StorageManager(ctx)
-  const renderer = new TypstRenderer(ctx, config.fontPath)
+  const renderer = new TypstRenderer(ctx, config)
   const pollScheduler = new PollScheduler(ctx, gitService, storage)
-  const pushScheduler = new PushScheduler(ctx, pollScheduler, renderer, storage)
+  const pushScheduler = new PushScheduler(ctx, pollScheduler, renderer, storage, config)
+
+  // ============ 加载字体并初始化 Typst ============
+  ctx.on('ready', async () => {
+    // 加载字体
+    if (ctx.toImageService && config.typstFontPath && fs.existsSync(config.typstFontPath)) {
+      try {
+        const fontData = fs.readFileSync(config.typstFontPath)
+        ctx.toImageService.fontManagement.addFont([{
+          data: fontData,
+          name: 'LXGW WenKai Mono',
+          format: 'ttf' as const,
+          filePath: config.typstFontPath,
+        }])
+        logger.info(`已加载字体: ${config.typstFontPath}`)
+      } catch (error) {
+        logger.error('加载字体失败:', error)
+      }
+    } else if (!ctx.toImageService && config.typstFontPath) {
+      logger.warn('未启用 to-image-service，无法加载字体，Typst 图片渲染将不可用')
+    } else if (config.typstFontPath) {
+      logger.warn(`字体文件不存在: ${config.typstFontPath}`)
+    }
+    
+    // 初始化 Typst 编译器
+    if (ctx.node && ctx.toImageService) {
+      try {
+        await renderer.init()
+        logger.info('Typst 编译器初始化成功')
+      } catch (error) {
+        logger.error('Typst 编译器初始化失败:', error)
+      }
+    } else {
+      logger.warn('未启用 to-image-service 或 w-node，Typst 图片渲染不可用')
+    }
+  })
 
   // ============ 启动监控任务 ============
   ctx.on('ready', () => {
