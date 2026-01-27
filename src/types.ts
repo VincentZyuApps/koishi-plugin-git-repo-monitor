@@ -64,6 +64,12 @@ export interface GitCommit {
   date: Date
   /** 提交 URL */
   url: string
+  /** 统计信息 */
+  stats?: {
+    files: number
+    additions: number
+    deletions: number
+  }
 }
 
 /**

@@ -275,10 +275,17 @@ export class TypstRenderer {
       const sha = this.escapeTypstContent(commit.shortSha.toUpperCase())
       const timeAgo = this.formatRelativeTime(commit.date)
       
-      // 模拟文件变化统计（实际需要从 API 获取）
-      const additions = Math.floor(Math.random() * 20) + 1
-      const deletions = Math.floor(Math.random() * 15)
-      const filesChanged = Math.floor(Math.random() * 5) + 1
+      // 使用真实的 stats 数据（如果存在且 showStats 启用）
+      const hasStats = this.config.showStats && commit.stats
+      const statsSection = hasStats
+        ? `#v(10pt)
+  
+  // 第五行：文件变化统计
+  #text(size: 10pt, fill: ${t.textSecondary})[${commit.stats!.files} 个文件发生了变化，影响行数：]
+  #text(size: 10pt, weight: "bold", fill: ${t.addColor})[+${commit.stats!.additions}]
+  #h(4pt)
+  #text(size: 10pt, weight: "bold", fill: ${t.delColor})[-${commit.stats!.deletions}]`
+        : ''
       
       return `// Commit ${index + 1}: ${sha}
 #block(width: 100%, fill: ${t.cardBg}, radius: 10pt, inset: (x: 16pt, y: 14pt), stroke: 1pt + ${t.cardBorder})[
@@ -307,14 +314,7 @@ export class TypstRenderer {
   #text(size: 13pt, weight: "bold")[${message}]
   
   ${bodyStr ? `#v(6pt)\n  #text(size: 10pt, fill: ${t.textSecondary})[${bodyStr}]` : ''}
-  
-  #v(10pt)
-  
-  // 第五行：文件变化统计
-  #text(size: 10pt, fill: ${t.textSecondary})[${filesChanged} 个文件发生了变化，影响行数：]
-  #text(size: 10pt, weight: "bold", fill: ${t.addColor})[+${additions}]
-  #h(4pt)
-  #text(size: 10pt, weight: "bold", fill: ${t.delColor})[-${deletions}]
+  ${statsSection}
 ]`
     }).join('\n\n#v(12pt)\n\n')
 

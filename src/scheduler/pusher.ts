@@ -1,7 +1,7 @@
 import { Context, Logger, h } from 'koishi'
 import * as cron from 'node-cron'
 import { Config, OutputMode } from '../config'
-import { MonitorGroup, RepoUpdate } from '../types'
+import { MonitorGroup, RepoUpdate, GitCommit, GitRelease, RepoConfig } from '../types'
 import { PollScheduler } from './poller'
 import { TypstRenderer } from '../services/renderer-typst'
 import { StorageManager } from '../utils/storage'
@@ -9,12 +9,46 @@ import { renderTextSummary } from '../services/render-text'
 import { renderPuppeteerImage } from '../services/render-puppeteer'
 import { buildForwardNodes } from '../services/render-forward'
 
+const MOCK_COMMIT_SUBJECTS = [
+  '【测试提交 1】极短占位：修复演示 Bug。',
+  '【测试提交 2】这里是一段稍长的演示描述，用于展示行宽效果，包含占位符 >>> lorem-test-002。',
+  '【测试提交 3】非常非常长的测试文案，故意堆叠多个片段：加入更多演示数据、同步 mock 依赖、更新截图模板、校准动画时间、添加“这仅是演示”提示，以便瀑布流高度差更明显。',
+  '【测试提交 4】中等长度的说明：补齐日志并注入假统计值。',
+  '【测试提交 5】短句：简化配置项。',
+]
+
+const MOCK_RELEASE_NOTES = [
+  '《测试发行版 1》——纯占位：只有一行，验证卡片最小高度。',
+  '《测试发行版 2》——中等长度：新增截图占位符、附带 5 条 bullet，用于 forward 卡片排版演示。',
+  '《测试发行版 3》——超长文本：此段会连续描述多个“仅供测试”的行为，包括 Dry-run 环境、假数据统计、固定告警文案、演示中的假链接、预设的行高与段落，从而让 Masonry 布局出现明显高低差异。',
+]
+
+const HARD_CODED_REPOS: Array<{ displayName: string; owner: string; config: RepoConfig }> = [
+  { displayName: '测试仓库 1', owner: '测试组织 · Alpha', config: { url: 'https://example.com/mock/test-repo-1', branch: 'main', type: 'commits' } },
+  { displayName: '测试仓库 2', owner: '测试组织 · Beta', config: { url: 'https://example.com/mock/test-repo-2', branch: 'develop', type: 'commits' } },
+  { displayName: '测试仓库 3', owner: '测试团队 · Gamma', config: { url: 'https://example.com/mock/test-repo-3', branch: 'main', type: 'commits' } },
+  { displayName: '测试仓库 4', owner: '测试团队 · Delta', config: { url: 'https://example.com/mock/test-repo-4', branch: 'release', type: 'commits' } },
+  { displayName: '测试仓库 5', owner: '测试发行组 · Echo', config: { url: 'https://example.com/mock/test-repo-5', branch: 'main', type: 'releases' } },
+  { displayName: '测试仓库 6', owner: '测试发行组 · Foxtrot', config: { url: 'https://example.com/mock/test-repo-6', branch: 'main', type: 'releases' } },
+]
+
 /**
  * 推送任务
  */
 interface PushJob {
   group: MonitorGroup
   job: cron.ScheduledTask
+}
+
+interface QuoteContext {
+  platform: string
+  channelId: string
+  messageId: string
+}
+
+interface PushOptions {
+  dryRun?: boolean
+  quoteContext?: QuoteContext
 }
 
 /**
@@ -81,15 +115,25 @@ export class PushScheduler {
   /**
    * 推送更新
    */
-  private async pushUpdates(group: MonitorGroup, trigger: 'passive' | 'active'): Promise<void> {
+  private async pushUpdates(
+    group: MonitorGroup,
+    trigger: 'passive' | 'active',
+    specificUpdates?: RepoUpdate[],
+    options: PushOptions = {},
+  ): Promise<void> {
+    const { dryRun = false, quoteContext } = options
     this.logger.debug(`执行推送任务: ${group.name}`)
     
     // 获取待推送的更新
-    const updates = this.pollScheduler.getPendingUpdates(group.name)
+    const updates = specificUpdates || this.pollScheduler.getPendingUpdates(group.name)
     
     if (updates.length === 0) {
-      this.logger.debug(`没有待推送的更新: ${group.name}`)
+      this.logger.debug(`${dryRun ? 'Dry-run 没有可推送的假数据' : '没有待推送的更新'}: ${group.name}`)
       return
+    }
+    
+    if (dryRun) {
+      this.logger.info(`Dry-run: 使用 ${updates.length} 条假数据推送 ${group.name}`)
     }
     
     // 获取启用的推送目标
@@ -133,6 +177,12 @@ export class PushScheduler {
 
       // 推送到所有启用的目标
       for (const target of enabledTargets) {
+        const shouldQuoteTarget =
+          trigger === 'active'
+          && quoteContext
+          && quoteContext.platform === target.platform
+          && quoteContext.channelId === target.channelId
+
         try {
           this.logger.info(`推送到 ${target.name} (${target.platform}:${target.channelId})`)
           
@@ -143,24 +193,31 @@ export class PushScheduler {
 
           // 发送普通消息
           if (messages.length > 0) {
-            await this.sendMessage(target.platform, target.channelId, messages)
+            const outboundMessages = shouldQuoteTarget && quoteContext
+              ? [h.quote(quoteContext.messageId), ...messages]
+              : messages
+            await this.sendMessage(target.platform, target.channelId, outboundMessages)
           } else if (!modes.includes('forward')) {
             this.logger.warn(`无可发送的消息内容: ${group.name}`)
           }
           
           // 保存推送记录
-          for (const update of updates) {
-            await this.storage.savePushRecord(
-              group.name,
-              target.platform,
-              target.channelId,
-              update.repo.url,
-              JSON.stringify({
-                type: update.type,
-                count: update.commits?.length || update.releases?.length || 0,
-                time: update.updateTime.toISOString(),
-              }),
-            )
+          if (!dryRun) {
+            for (const update of updates) {
+              await this.storage.savePushRecord(
+                group.name,
+                target.platform,
+                target.channelId,
+                update.repo.url,
+                JSON.stringify({
+                  type: update.type,
+                  count: update.commits?.length || update.releases?.length || 0,
+                  time: update.updateTime.toISOString(),
+                }),
+              )
+            }
+          } else {
+            this.logger.debug('Dry-run: 跳过推送记录持久化')
           }
           
           this.logger.info(`推送成功: ${target.name}`)
@@ -267,13 +324,106 @@ export class PushScheduler {
   /**
    * 手动触发推送
    */
-  async triggerPush(groupName: string): Promise<void> {
+  async triggerPush(groupName: string, mode: 'new' | 'last' = 'new', options: PushOptions = {}): Promise<void> {
     const job = this.jobs.get(groupName)
     if (!job) {
       throw new Error(`未找到监控组: ${groupName}`)
     }
     
-    await this.pushUpdates(job.group, 'active')
+    if (mode === 'last') {
+      const updates = await this.pollScheduler.fetchLatestUpdates(job.group)
+      await this.pushUpdates(job.group, 'active', updates, options)
+    } else {
+      await this.pushUpdates(job.group, 'active', undefined, options)
+    }
+  }
+
+  async triggerDryRun(repoCount = 15, options: PushOptions = {}): Promise<void> {
+    const jobs = Array.from(this.jobs.values())
+    if (jobs.length === 0) {
+      throw new Error('当前没有运行中的监控组，无法执行 Dry-run')
+    }
+
+    const count = Math.max(1, Math.min(repoCount, 30))
+    const updates = this.buildMockUpdates(count)
+    for (const { group } of jobs) {
+      this.logger.info(`Dry-run: 向监控组 ${group.name} 推送 ${updates.length} 条硬编码示例`)
+      await this.pushUpdates(group, 'active', updates, { ...options, dryRun: true })
+    }
+  }
+
+  private buildMockUpdates(count: number): RepoUpdate[] {
+    const updates: RepoUpdate[] = []
+    const now = Date.now()
+    const maxCommits = Math.max(1, Math.min(this.config.maxCommitsPerPush || 5, 3))
+
+    for (let i = 0; i < count; i++) {
+      const repoMeta = HARD_CODED_REPOS[i % HARD_CODED_REPOS.length]
+      const repoConfig = repoMeta.config
+      const repoName = repoMeta.displayName
+      const repoOwner = repoMeta.owner
+
+      if (repoConfig.type === 'commits') {
+        const commits: GitCommit[] = []
+        for (let c = 0; c < maxCommits; c++) {
+          const subject = MOCK_COMMIT_SUBJECTS[(i + c) % MOCK_COMMIT_SUBJECTS.length]
+          const date = new Date(now - ((i * 3) + c) * 60 * 1000)
+          const shaBase = `${i.toString(16).padStart(4, '0')}${c.toString(16).padStart(3, '0')}`
+          const commit: GitCommit = {
+            sha: `dryrun-${shaBase}-${Date.now()}`,
+            shortSha: `dry${shaBase}`.slice(0, 7),
+            message: subject,
+            author: `测试开发者 #${((i + c) % 5) + 1}`,
+            authorEmail: `tester${((i + c) % 5) + 1}@example.com`,
+            date,
+            url: `${repoConfig.url.replace(/\/$/, '')}/commit/dryrun-${shaBase}`,
+          }
+
+          if (this.config.showStats) {
+            commit.stats = {
+              files: 1 + ((i + c) % 5),
+              additions: 20 + (c * 5),
+              deletions: 5 + (c * 3),
+            }
+          }
+
+          commits.push(commit)
+        }
+
+        updates.push({
+          repo: repoConfig,
+          repoName,
+          repoOwner,
+          type: 'commits',
+          commits,
+          updateTime: commits[0].date,
+        })
+      } else {
+        const note = MOCK_RELEASE_NOTES[i % MOCK_RELEASE_NOTES.length]
+        const publishedAt = new Date(now - i * 120 * 1000)
+        const tag = `test-v${1 + Math.floor(i / 2)}.${i % 4}.${(i + 1) % 3}`
+        const release: GitRelease = {
+          tagName: tag,
+          name: `测试发行版 ${i + 1}`,
+          body: `${note}\n\n· 测试字段 A：演示用途\n· 测试字段 B：仅供截图\n· 测试字段 C：不会推送到 GitHub`,
+          author: '测试发布机器人',
+          publishedAt,
+          url: `${repoConfig.url.replace(/\/$/, '')}/releases/${tag}`,
+          prerelease: i % 2 === 0,
+        }
+
+        updates.push({
+          repo: repoConfig,
+          repoName,
+          repoOwner,
+          type: 'releases',
+          releases: [release],
+          updateTime: release.publishedAt,
+        })
+      }
+    }
+
+    return updates
   }
 
   /**

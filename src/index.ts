@@ -1,4 +1,4 @@
-import { Context } from 'koishi'
+import { Context, Session, h } from 'koishi'
 import fs from 'node:fs'
 import { Config } from './config'
 import { RepoState, PushRecord } from './types'
@@ -56,10 +56,79 @@ export const usage = `
 
 ### 🔧 命令列表
 
-- \`git-monitor\` - 查看监控状态
-- \`git-monitor.check <组名>\` - 手动触发检查
-- \`git-monitor.push <组名>\` - 手动触发推送
-- \`git-monitor.list\` - 列出所有监控仓库
+<table>
+<thead>
+<tr><th>指令</th><th>说明</th><th>示例</th></tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>git-monitor</code></td>
+  <td>查看监控状态</td>
+  <td><code>git-monitor</code></td>
+</tr>
+<tr>
+  <td><code>git-monitor.check &lt;组名&gt;</code></td>
+  <td>手动触发检查</td>
+  <td><code>git-monitor.check qwq</code></td>
+</tr>
+<tr>
+  <td><code>git-monitor.push &lt;组名&gt; [-m mode]</code></td>
+  <td>手动触发推送<br>
+  • <code>-m new</code> (默认): 仅推送新更新<br>
+  • <code>-m last</code>: 强制推送最新状态</td>
+  <td><code>git-monitor.push qwq</code><br><code>git-monitor.push qwq -m last</code></td>
+</tr>
+<tr>
+  <td><code>git-monitor.list</code></td>
+  <td>列出所有监控仓库</td>
+  <td><code>git-monitor.list</code></td>
+</tr>
+</tbody>
+</table>
+
+### 💾 数据库表结构
+
+<h4>1. git_repo_state (仓库状态表)</h4>
+<table>
+<thead>
+<tr><th>字段</th><th>类型</th><th>说明</th></tr>
+</thead>
+<tbody>
+<tr><td>id</td><td>unsigned</td><td>主键自增</td></tr>
+<tr><td>repoUrl</td><td>string</td><td>仓库地址</td></tr>
+<tr><td>branch</td><td>string</td><td>分支名</td></tr>
+<tr><td>lastCheckpoint</td><td>string</td><td>上次检查点 (ISO 时间戳)</td></tr>
+<tr><td>lastUpdated</td><td>timestamp</td><td>上次更新时间</td></tr>
+</tbody>
+</table>
+<p><b>⚠️ 注意：</b> <code>repoUrl</code> + <code>branch</code> 组合唯一</p>
+
+<h4>2. git_push_record (推送记录表)</h4>
+<table>
+<thead>
+<tr><th>字段</th><th>类型</th><th>说明</th></tr>
+</thead>
+<tbody>
+<tr><td>id</td><td>unsigned</td><td>主键自增</td></tr>
+<tr><td>groupName</td><td>string</td><td>监控组名</td></tr>
+<tr><td>platform</td><td>string</td><td>推送平台</td></tr>
+<tr><td>channelId</td><td>string</td><td>频道 ID</td></tr>
+<tr><td>repoUrl</td><td>string</td><td>仓库地址</td></tr>
+<tr><td>content</td><td>text</td><td>推送内容摘要</td></tr>
+<tr><td>pushedAt</td><td>timestamp</td><td>推送时间</td></tr>
+</tbody>
+</table>
+
+### 🔄 更新检测机制 (New 模式)
+
+<ol>
+<li><b>基准获取</b>：从 <code>git_repo_state</code> 表读取 <code>lastCheckpoint</code></li>
+<li><b>API 请求</b>：向 GitHub/Gitee API 传递 <code>since</code> 参数</li>
+<li><b>精准过滤</b>：过滤掉时间 &lt;= 检查点的提交</li>
+<li><b>状态更新</b>：推送后更新最新 Commit 时间戳到数据库</li>
+<li><b>Silent Start</b>：首次运行默认不推送，仅记录 Checkpoint</li>
+</ol>
+
 
 ### 📖 Cron 表达式示例
 
@@ -110,8 +179,26 @@ export function apply(ctx: Context, config: Config) {
   const gitService = new GitService(ctx, config, config.githubToken, config.giteeToken)
   const storage = new StorageManager(ctx)
   const renderer = new TypstRenderer(ctx, config)
-  const pollScheduler = new PollScheduler(ctx, gitService, storage)
+  const pollScheduler = new PollScheduler(ctx, gitService, storage, config)
   const pushScheduler = new PushScheduler(ctx, pollScheduler, renderer, storage, config)
+
+  const formatCommandReply = (session: Session | undefined, content: string) => {
+    if (config.quoteCommandReplies && session?.messageId) {
+      return `${h.quote(session.messageId)}${content}`
+    }
+    return content
+  }
+
+  const buildQuoteContext = (session: Session | undefined) => {
+    if (!config.quoteCommandReplies || !session?.messageId || !session.channelId) {
+      return undefined
+    }
+    return {
+      platform: session.platform,
+      channelId: String(session.channelId),
+      messageId: session.messageId,
+    }
+  }
 
   // ============ 加载字体并初始化 Typst ============
   ctx.on('ready', async () => {
@@ -175,12 +262,12 @@ export function apply(ctx: Context, config: Config) {
 
   // ============ 注册命令 ============
   ctx.command('git-monitor', 'Git 仓库监控')
-    .action(() => {
+    .action(({ session }) => {
       const pollStatus = pollScheduler.getStatus()
       const pushStatus = pushScheduler.getStatus()
       
       if (pollStatus.length === 0) {
-        return '当前没有运行的监控任务'
+        return formatCommandReply(session, '当前没有运行的监控任务')
       }
       
       const lines = ['📊 Git 仓库监控状态\n']
@@ -194,50 +281,75 @@ export function apply(ctx: Context, config: Config) {
         lines.push(`  └─ 推送周期: ${pushInfo?.pushCron || '未知'}\n`)
       }
       
-      return lines.join('\n')
+      return formatCommandReply(session, lines.join('\n'))
     })
 
   ctx.command('git-monitor.check <group:string>', '手动触发检查')
     .action(async ({ session }, group) => {
       if (!group) {
-        return '请指定监控组名称'
+        return formatCommandReply(session, '请指定监控组名称')
       }
       
       const monitorGroup = config.monitorGroups.find(g => g.name === group)
       if (!monitorGroup) {
-        return `未找到监控组: ${group}`
+        return formatCommandReply(session, `未找到监控组: ${group}`)
       }
       
       try {
-        if (session) await session.send(`开始检查 ${group}...`)
+        if (session) await session.send(formatCommandReply(session, `🔍 开始检查 ${group}...`))
         // 手动触发检查的逻辑可以在这里实现
-        return `检查完成`
+        return formatCommandReply(session, '✅ 检查完成')
       } catch (error) {
         logger.error(`手动检查失败:`, error)
-        return `检查失败: ${(error as Error).message || String(error)}`
+        return formatCommandReply(session, `❌ 检查失败: ${(error as Error).message || String(error)}`)
       }
     })
 
   ctx.command('git-monitor.push <group:string>', '手动触发推送')
-    .action(async ({ session }, group) => {
+    .option('mode', '-m <mode:string> 推送模式：last (最新一条) 或 new (新增)', { fallback: 'new' })
+    .action(async ({ session, options }, group) => {
       if (!group) {
-        return '请指定监控组名称'
+        return formatCommandReply(session, '请指定监控组名称')
       }
       
+      const verboseLog = config.verboseSessionLog
+      const quoteContext = buildQuoteContext(session)
       try {
-        if (session) await session.send(`开始推送 ${group}...`)
-        await pushScheduler.triggerPush(group)
-        return `推送完成`
+        if (verboseLog && session) {
+          await session.send(formatCommandReply(session, `📤 开始推送 ${group}...`))
+        }
+        await pushScheduler.triggerPush(group, options?.mode as 'new' | 'last', { quoteContext })
+        return formatCommandReply(session, verboseLog ? '✅ 推送完成' : '✅ 完成')
       } catch (error) {
         logger.error(`手动推送失败:`, error)
-        return `推送失败: ${(error as Error).message || String(error)}`
+        return formatCommandReply(session, `❌ 推送失败: ${(error as Error).message || String(error)}`)
+      }
+    })
+
+  ctx.command('git-monitor.dryrun', '使用硬编码假数据推送用于调试渲染')
+    .option('count', '-n <count:number> 假数据仓库数量（1-30）', { fallback: 15 })
+    .action(async ({ session, options }) => {
+      const rawCount = typeof options?.count === 'number' ? options.count : Number(options?.count)
+      const count = Math.max(1, Math.min(Number.isFinite(rawCount) ? rawCount : 15, 30))
+      const verboseLog = config.verboseSessionLog
+      const quoteContext = buildQuoteContext(session)
+
+      try {
+        if (verboseLog && session) {
+          await session.send(formatCommandReply(session, `🧪 Dry-run: 使用硬编码示例推送（${count} 个仓库）...`))
+        }
+        await pushScheduler.triggerDryRun(count, { quoteContext })
+        return formatCommandReply(session, verboseLog ? `✅ Dry-run 推送完成（${count} 个示例仓库）` : '✅ 完成')
+      } catch (error) {
+        logger.error(`Dry-run 推送失败:`, error)
+        return formatCommandReply(session, `❌ Dry-run 推送失败: ${(error as Error).message || String(error)}`)
       }
     })
 
   ctx.command('git-monitor.list', '列出所有监控仓库')
-    .action(() => {
+    .action(({ session }) => {
       if (!config.monitorGroups || config.monitorGroups.length === 0) {
-        return '未配置监控组'
+        return formatCommandReply(session, '未配置监控组')
       }
       
       const lines = ['📋 监控仓库列表\n']
@@ -254,7 +366,7 @@ export function apply(ctx: Context, config: Config) {
         lines.push(`  ⏰ 轮询: ${group.pollCron} | 推送: ${group.pushCron}\n`)
       }
       
-      return lines.join('\n')
+      return formatCommandReply(session, lines.join('\n'))
     })
 
   // ============ 清理任务 ============

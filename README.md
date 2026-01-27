@@ -61,9 +61,59 @@ plugins:
 
 ## 命令
 
-- `git-monitor` - 查看监控状态
-- `git-monitor.check` - 手动触发检查
-- `git-monitor.list` - 列出所有监控仓库
+| 指令 | 说明 | 示例 |
+|------|------|------|
+| `git-monitor` | 查看监控状态 | `git-monitor` |
+| `git-monitor.check <组名>` | 手动触发检查 | `git-monitor.check qwq` |
+| `git-monitor.push <组名> [-m mode]` | 手动触发推送<br>• `-m new` (默认): 仅推送新更新<br>• `-m last`: 强制推送最新状态 | `git-monitor.push qwq`<br>`git-monitor.push qwq -m last` |
+| `git-monitor.list` | 列出所有监控仓库 | `git-monitor.list` |
+
+## 数据库设计
+
+插件使用 Koishi 内置数据库维护两张表：
+
+### 1. `git_repo_state` (仓库状态表)
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | unsigned | 主键自增 |
+| repoUrl | string | 仓库地址 |
+| branch | string | 分支名 |
+| lastCheckpoint | string | 上次检查点（ISO 时间戳） |
+| lastUpdated | timestamp | 上次更新时间 |
+
+**作用**：记录每个仓库的监控进度，实现增量更新检测。  
+**约束**：`repoUrl` + `branch` 组合唯一。
+
+### 2. `git_push_record` (推送记录表)
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | unsigned | 主键自增 |
+| groupName | string | 监控组名 |
+| platform | string | 推送平台 |
+| channelId | string | 频道 ID |
+| repoUrl | string | 仓库地址 |
+| content | text | 推送内容摘要 |
+| pushedAt | timestamp | 推送时间 |
+
+**作用**：记录历史推送行为，用于审计。
+
+## 更新检测机制 (New 模式)
+
+为了在轮询和 `new` 模式推送下准确获取增量更新，插件采用以下逻辑：
+
+1. **基准获取**：从 `git_repo_state` 表中读取该仓库对应分支的 `lastCheckpoint`（通常是 ISO 时间戳）。
+2. **API 请求**：调用 GitHub/Gitee API 时，将 `lastCheckpoint` 作为 `since` 参数传递，请求该时间点之后的数据。
+3. **精准过滤**：由于 API 返回的数据可能包含 `since` 时间点本身的提交，插件会在内存中进行二次过滤：
+   ```typescript
+   // 过滤掉 <= 上次检查点的提交
+   const newCommits = rawCommits.filter(c => c.date.getTime() > checkpointTime)
+   ```
+4. **状态更新**：一旦确认有新提交并准备推送，将最新一条 Commit 的时间戳更新回数据库，作为下一次检查的基准。
+5. **首次运行 (Silent Start)**：如果是第一次添加仓库（无数据库记录）：
+   - 默认开启 `silentStart`：仅将最新 Commit 记录为 Checkpoint，**不发送推送**，防止刚添加时刷屏。
+   - 关闭 `silentStart`：将最新一条 Commit 视为更新并推送。
 
 ## 架构设计
 

@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-git-repo-monitor",
   "description": "监控 Git 仓库变化并推送通知到指定频道，支持 Typst 和 puppeteer 渲染",
-  "version": "0.1.1-alpha.2+20260124",
+  "version": "0.2.0-alpha.1+20260127",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
@@ -18,8 +18,8 @@
     "typst"
   ],
   "peerDependencies": {
-    "koishi": "^4.18.0",
     "@myriaddreamin/typst-ts-node-compiler": ">=0.5.0",
+    "koishi": "^4.18.0",
     "koishi-plugin-to-image-service": ">=0.1.0",
     "koishi-plugin-w-node": ">=1.0.0"
   },
@@ -41,8 +41,8 @@
     "socks-proxy-agent": "^8.0.5"
   },
   "devDependencies": {
-    "@types/node-cron": "^3.0.11",
     "@myriaddreamin/typst-ts-node-compiler": "^0.5.0",
+    "@types/node-cron": "^3.0.11",
     "koishi-plugin-to-image-service": "^0.1.5",
     "koishi-plugin-w-node": "^1.0.1"
   }

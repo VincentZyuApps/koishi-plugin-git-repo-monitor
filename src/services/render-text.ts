@@ -30,7 +30,12 @@ export function renderTextSummary(updates: RepoUpdate[], groupName: string, conf
       const displayCommits = commits.slice(0, maxCommits)
       for (const commit of displayCommits) {
         const title = trimLine(commit.message.split('\n')[0], 80)
-        lines.push(`- ${commit.shortSha.toUpperCase()} ${title}`)
+        let commitLine = `- ${commit.shortSha.toUpperCase()} ${title}`
+        if (config.showStats && commit.stats) {
+          const { files, additions, deletions } = commit.stats
+          commitLine += ` [${files}文件 +${additions} -${deletions}]`
+        }
+        lines.push(commitLine)
       }
       if (commits.length > displayCommits.length) {
         lines.push(`… 还有 ${commits.length - displayCommits.length} 个提交`)
@@ -64,7 +69,12 @@ export function renderTextPerRepo(update: RepoUpdate, config: Config): string {
     const displayCommits = commits.slice(0, maxCommits)
     for (const commit of displayCommits) {
       const title = trimLine(commit.message.split('\n')[0], 80)
-      lines.push(`- ${commit.shortSha.toUpperCase()} ${title}`)
+      let commitLine = `- ${commit.shortSha.toUpperCase()} ${title}`
+      if (config.showStats && commit.stats) {
+        const { files, additions, deletions } = commit.stats
+        commitLine += ` [${files}文件 +${additions} -${deletions}]`
+      }
+      lines.push(commitLine)
     }
     if (commits.length > displayCommits.length) {
       lines.push(`… 还有 ${commits.length - displayCommits.length} 个提交`)

@@ -38,6 +38,68 @@ type IconMap = {
   gitee?: string
 }
 
+type FlowDirection = 'row-first' | 'column-first'
+
+function buildMasonryColumns(cards: string[], columns: number, flow: FlowDirection) {
+  const colCount = Math.max(1, columns)
+  if (colCount === 1) {
+    return cards.join('')
+  }
+
+  const buckets: string[][] = Array.from({ length: colCount }, () => [])
+
+  if (flow === 'row-first') {
+    cards.forEach((card, index) => {
+      buckets[index % colCount].push(card)
+    })
+  } else {
+    const rowsPerColumn = Math.ceil(cards.length / colCount)
+    for (let col = 0; col < colCount; col++) {
+      for (let row = 0; row < rowsPerColumn; row++) {
+        const idx = col * rowsPerColumn + row
+        if (idx < cards.length) {
+          buckets[col].push(cards[idx])
+        }
+      }
+    }
+  }
+
+  return buckets.map(colCards => `<div class="masonry-col">${colCards.join('')}</div>`).join('')
+}
+
+/**
+ * 贪心算法构建瀑布流列
+ * 根据每个卡片的高度，将卡片分配到当前最矮的列，使各列高度差最小化
+ */
+function buildMasonryColumnsGreedy(cards: string[], columns: number, cardHeights: number[]) {
+  const colCount = Math.max(1, columns)
+  if (colCount === 1) {
+    return cards.join('')
+  }
+
+  const buckets: string[][] = Array.from({ length: colCount }, () => [])
+  const colHeights: number[] = Array(colCount).fill(0)
+  const gap = 10 // 与 CSS 中的 gap 保持一致
+
+  // 贪心：每次把卡片放到当前最矮的列
+  for (let i = 0; i < cards.length; i++) {
+    // 找到当前最矮的列
+    let minColIndex = 0
+    let minHeight = colHeights[0]
+    for (let col = 1; col < colCount; col++) {
+      if (colHeights[col] < minHeight) {
+        minHeight = colHeights[col]
+        minColIndex = col
+      }
+    }
+    
+    buckets[minColIndex].push(cards[i])
+    colHeights[minColIndex] += cardHeights[i] + gap
+  }
+
+  return buckets.map(colCards => `<div class="masonry-col">${colCards.join('')}</div>`).join('')
+}
+
 function getProviderIconHtml(url: string, icons: IconMap) {
   if (url.includes('gitee') && icons.gitee) {
     return `<img src="${icons.gitee}" alt="gitee" />`
@@ -82,8 +144,14 @@ function formatCommitMessage(msg: string): string {
   return `<span class="commit-prefix" style="background-color: ${style.bg}; color: ${style.color}">${escapeHtml(type)}${breakingHtml}</span>${scopeHtml}: ${escapeHtml(subject)}`
 }
 
-function buildHtml(updates: RepoUpdate[], groupName: string, config: Config, icons: IconMap, fontCss: string) {
+function buildHtml(updates: RepoUpdate[], groupName: string, config: Config, icons: IconMap, fontCss: string, cardHeights?: number[]) {
   const dark = config.puppeteerDarkMode
+  const colCount = config.puppeteerColumnCount || 1
+  const layoutMode = config.puppeteerLayoutMode || 'masonry'
+  const flowDirection: FlowDirection = config.puppeteerFlowDirection || 'row-first'
+  const masonryEnabled = layoutMode === 'masonry' && colCount > 1 // 瀑布流只在多列场景下生效
+  const useGreedy = config.puppeteerMasonryGreedy !== false && masonryEnabled && cardHeights && cardHeights.length > 0
+  const repoCount = updates.length
   const theme = dark ? {
     pageBg: '#050505',
     pageOverlay: 'rgba(35, 35, 35, 0.70)',
@@ -100,6 +168,12 @@ function buildHtml(updates: RepoUpdate[], groupName: string, config: Config, ico
     tagText: '#7dcfff',
     scopeColor: '#8dcff8',
     shadow: '0 4px 20px rgba(0, 0, 0, 0.40), inset 0 1px 1px rgba(255, 255, 255, 0.18)',
+    statFilesBg: 'rgba(148, 163, 184, 0.20)',
+    statFilesText: '#e2e8f0',
+    statAddBg: 'rgba(34, 197, 94, 0.22)',
+    statAddText: '#4ade80',
+    statDelBg: 'rgba(248, 113, 113, 0.22)',
+    statDelText: '#fda4af',
   } : {
     pageBg: '#eef1f4',
     pageOverlay: 'rgba(255, 255, 255, 0.95)',
@@ -116,9 +190,16 @@ function buildHtml(updates: RepoUpdate[], groupName: string, config: Config, ico
     tagText: '#0284c7',
     scopeColor: '#0369a1',
     shadow: '0 4px 16px rgba(0, 0, 0, 0.08)',
+    statFilesBg: 'rgba(99, 102, 241, 0.12)',
+    statFilesText: '#312e81',
+    statAddBg: 'rgba(34, 197, 94, 0.10)',
+    statAddText: '#15803d',
+    statDelBg: 'rgba(248, 113, 113, 0.12)',
+    statDelText: '#b91c1c',
   }
 
   const cards: string[] = []
+  let cardIndex = 0 // 用于贪心算法匹配卡片高度
 
   for (const update of updates) {
     const repo = `${update.repoOwner}/${update.repoName}`
@@ -130,7 +211,7 @@ function buildHtml(updates: RepoUpdate[], groupName: string, config: Config, ico
 
       if (commits.length === 0) {
         cards.push(`
-          <div class="item">
+          <div class="item" data-index="${cardIndex++}">
             <div class="title">
               <div class="text">
                 <span class="icon">${icon}</span>
@@ -149,12 +230,28 @@ function buildHtml(updates: RepoUpdate[], groupName: string, config: Config, ico
       for (const commit of commits) {
         const rawMessage = commit.message.split('\n')[0]
         const messageHtml = formatCommitMessage(rawMessage)
-        const body = commit.message.split('\n').slice(1).join(' ').trim()
+        const body = (commit.message.split('\n').slice(1).join(' ') || '').trim()
         const bodyText = body ? escapeHtml(body.slice(0, 260)) : ''
         const time = formatRelativeTime(commit.date)
 
+        let statsHtml = ''
+        if (commit.stats) {
+          const statChips: string[] = []
+          statChips.push(`<span class="stat-badge stat-files">🗂 ${commit.stats.files} 个文件</span>`)
+          if (commit.stats.additions) {
+            statChips.push(`<span class="stat-badge stat-add">+${commit.stats.additions}</span>`)
+          }
+          if (commit.stats.deletions) {
+            statChips.push(`<span class="stat-badge stat-del">-${commit.stats.deletions}</span>`)
+          }
+          statsHtml = `
+          <div class="stats">
+            ${statChips.join('\n')}
+          </div>`
+        }
+
         cards.push(`
-          <div class="item">
+          <div class="item" data-index="${cardIndex++}">
             <div class="title">
               <div class="text">
                 <span class="icon">${icon}</span>
@@ -172,6 +269,7 @@ function buildHtml(updates: RepoUpdate[], groupName: string, config: Config, ico
                 <div class="head">${messageHtml}</div>
                 ${bodyText ? `<div class="body">${bodyText}</div>` : ''}
               </div>
+              ${statsHtml}
             </div>
           </div>
         `)
@@ -182,7 +280,7 @@ function buildHtml(updates: RepoUpdate[], groupName: string, config: Config, ico
     const releases = (update.releases || []).slice(0, 3)
     if (releases.length === 0) {
         cards.push(`
-        <div class="item">
+        <div class="item" data-index="${cardIndex++}">
           <div class="title">
             <div class="text">
               <span class="icon">${icon}</span>
@@ -203,7 +301,7 @@ function buildHtml(updates: RepoUpdate[], groupName: string, config: Config, ico
       const badge = release.prerelease ? 'Pre-release' : 'Release'
 
       cards.push(`
-        <div class="item">
+        <div class="item" data-index="${cardIndex++}">
           <div class="title">
             <div class="text">
               <span class="icon">${icon}</span>
@@ -227,6 +325,13 @@ function buildHtml(updates: RepoUpdate[], groupName: string, config: Config, ico
     }
   }
 
+  const listClass = `list layout-${layoutMode}${masonryEnabled ? ' masonry-enabled' : ''} flow-${flowDirection}`
+  const listContent = masonryEnabled
+    ? (useGreedy 
+        ? buildMasonryColumnsGreedy(cards, colCount, cardHeights)
+        : buildMasonryColumns(cards, colCount, flowDirection))
+    : cards.join('')
+
   return `<!doctype html>
 <html>
 <head>
@@ -237,27 +342,46 @@ function buildHtml(updates: RepoUpdate[], groupName: string, config: Config, ico
   * { box-sizing: border-box; }
   body { margin: 0; font-family: "LXGW WenKai Mono", "Inconsolata", "Noto Sans CJK SC", "Noto Sans", "Segoe UI", sans-serif; background: ${theme.pageBg}; color: ${theme.textPrimary}; letter-spacing: 0.05em; }
   .container {
-    max-width: 630px;
-    min-width: 500px;
+    max-width: ${colCount * 580}px;
+    min-width: ${colCount * 460}px;
     width: max-content;
-    padding: 22px 18px 12px 18px;
+    padding: 16px 14px 10px 14px;
     background: ${theme.pageOverlay};
     border-radius: 18px;
     border: 1px solid ${theme.cardBorder};
     box-shadow: 0 16px 50px rgba(0, 0, 0, 0.35);
   }
-  .head_box { padding: 10px; text-align: left; }
-  .id_text { font-size: 30px; font-weight: 900; letter-spacing: 0.6px; text-shadow: 0 1px 2px rgba(0,0,0,0.35); }
-  .subline { color: ${theme.textSecondary}; font-size: 12px; margin-top: 8px; letter-spacing: 0.04em; }
-  .data_box { border-radius: 12px; margin-top: -4px; padding: 6px; }
-  .list { display: flex; flex-direction: column; gap: 15px; }
+  .head_box { padding: 6px 6px 2px 6px; text-align: left; }
+  .id_text { font-size: 34px; font-weight: 900; letter-spacing: 0.6px; text-shadow: 0 1px 2px rgba(0,0,0,0.35); }
+  .subline { color: ${theme.textSecondary}; font-size: 12px; margin-top: 4px; letter-spacing: 0.04em; }
+  .count_line { color: ${theme.textSecondary}; font-size: 12px; margin-top: 2px; letter-spacing: 0.05em; }
+  .data_box { border-radius: 10px; margin-top: -2px; padding: 4px; }
+  .list { display: grid; grid-template-columns: repeat(${colCount}, 1fr); gap: 10px; align-items: start; grid-auto-flow: row; }
+  .list.flow-row-first { grid-auto-flow: row; }
+  .list.flow-column-first { grid-auto-flow: column; }
+  .list.layout-equalized-row { align-items: stretch; }
+  .list.layout-top-aligned { align-items: start; }
+  .list.layout-masonry { align-items: start; }
+  .list.layout-masonry.masonry-enabled {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .list.layout-masonry .masonry-col {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
+  }
+  .list.layout-masonry .masonry-col .item { width: 100%; }
   .item {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     background: linear-gradient(135deg, ${theme.cardBg1}, ${theme.cardBg2});
     backdrop-filter: blur(12px) saturate(150%);
-    border-radius: 16px;
-    padding: 15px;
+    border-radius: 14px;
+    padding: 11px;
     box-shadow: ${theme.shadow};
     border: 1px solid ${theme.cardBorder};
   }
@@ -269,18 +393,18 @@ function buildHtml(updates: RepoUpdate[], groupName: string, config: Config, ico
   .title .text .icon-emoji { font-size: 20px; }
   .title .text .release {
     font-size: 11px;
-    margin-left: 10px;
+    margin-left: 6px;
     color: ${theme.tagText};
     border: 2px solid ${theme.tagText};
     border-radius: 999px;
-    padding: 3px 10px;
+    padding: 2px 8px;
     font-weight: 800;
     box-shadow: 0 0 10px ${theme.tagText}20;
   }
-  .branch { display: flex; align-items: center; font-size: 13px; margin-top: 10px; color: ${theme.textSecondary}; gap: 8px; flex-wrap: wrap; }
+  .branch { display: flex; align-items: center; font-size: 13px; margin-top: 7px; color: ${theme.textSecondary}; gap: 6px; flex-wrap: wrap; }
   .branch .chip { 
-    display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; 
-    border-radius: 8px; 
+    display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; 
+    border-radius: 7px; 
     letter-spacing: 0.02em; font-weight: 700;
     box-shadow: 0 2px 6px rgba(0,0,0,0.1);
   }
@@ -293,13 +417,13 @@ function buildHtml(updates: RepoUpdate[], groupName: string, config: Config, ico
   .dec {
     font-size: 13px;
     color: ${theme.textSecondary};
-    margin-top: 12px;
+    margin-top: 8px;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding-bottom: 4px;
+    gap: 6px;
+    padding-bottom: 3px;
     border-bottom: 1px dashed ${theme.cardBorder};
-    margin-bottom: 10px;
+    margin-bottom: 8px;
   }
   .dec .author-name { color: ${theme.accent}; font-weight: 800; letter-spacing: 0.03em; font-size: 14px; }
   .dec .author-time { color: ${theme.textSecondary}; font-size: 12px; opacity: 0.8; }
@@ -310,9 +434,24 @@ function buildHtml(updates: RepoUpdate[], groupName: string, config: Config, ico
     margin-bottom: 6px;
   }
   .desc .body { 
-    margin-top: 8px; line-height: 1.7; font-size: 14px; color: ${theme.textSecondary}; 
-    background: rgba(0,0,0,0.1); padding: 10px; border-radius: 8px; border-left: 3px solid ${theme.cardBorder};
+    margin-top: 6px; line-height: 1.6; font-size: 14px; color: ${theme.textSecondary}; 
+    background: rgba(0,0,0,0.1); padding: 8px; border-radius: 7px; border-left: 3px solid ${theme.cardBorder};
   }
+  .stats { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; font-size: 13px; }
+  .stat-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    border: 1px solid transparent;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+  .stat-files { background: ${theme.statFilesBg}; color: ${theme.statFilesText}; border-color: ${theme.statFilesText}30; }
+  .stat-add { background: ${theme.statAddBg}; color: ${theme.statAddText}; border-color: ${theme.statAddText}30; }
+  .stat-del { background: ${theme.statDelBg}; color: ${theme.statDelText}; border-color: ${theme.statDelText}30; }
   .commit-prefix {
     display: inline-block;
     padding: 3px 8px;
@@ -335,10 +474,11 @@ function buildHtml(updates: RepoUpdate[], groupName: string, config: Config, ico
     <div class="head_box">
       <div class="id_text">Git仓库更新推送</div>
       <div class="subline">${escapeHtml(groupName)} · ${escapeHtml(new Date().toLocaleString('zh-CN'))}</div>
+      <div class="count_line">本次发送 ${repoCount} 个仓库</div>
     </div>
     <div class="data_box">
-      <div class="list">
-        ${cards.join('')}
+      <div class="${listClass}">
+        ${listContent}
       </div>
     </div>
     <div class="footer">Created By Koishi Git Monitor</div>
@@ -391,11 +531,48 @@ export async function renderPuppeteerImage(ctx: Context, config: Config, updates
   }
 
   const page = await ctx.puppeteer.page()
-  const html = buildHtml(updates, groupName, config, icons, fontCss)
+  const viewportWidth = 820
+  const viewportScale = Math.max(0.5, config.puppeteerRenderScale || 1.3)
+
+  // 判断是否需要贪心重排（瀑布流 + 多列 + 开启贪心）
+  const colCount = config.puppeteerColumnCount || 1
+  const layoutMode = config.puppeteerLayoutMode || 'masonry'
+  const masonryEnabled = layoutMode === 'masonry' && colCount > 1
+  const needGreedyReflow = config.puppeteerMasonryGreedy !== false && masonryEnabled
 
   try {
-    const viewportWidth = 820
-    const viewportScale = Math.max(0.5, config.puppeteerRenderScale || 1.3)
+    let cardHeights: number[] | undefined
+
+    // 如果需要贪心重排，先渲染一次获取各卡片高度
+    if (needGreedyReflow) {
+      const initialHtml = buildHtml(updates, groupName, config, icons, fontCss)
+      
+      await page.setViewport({
+        width: viewportWidth,
+        height: 800,
+        deviceScaleFactor: viewportScale,
+      })
+
+      await page.setContent(initialHtml, {
+        waitUntil: 'domcontentloaded',
+        timeout: 15000,
+      })
+
+      // 获取每个卡片的高度（按 data-index 排序，确保顺序与 cards 数组一致）
+      cardHeights = await page.evaluate(() => {
+        const items = Array.from(document.querySelectorAll('.item[data-index]'))
+        // 按 data-index 排序
+        items.sort((a, b) => {
+          const indexA = parseInt(a.getAttribute('data-index') || '0', 10)
+          const indexB = parseInt(b.getAttribute('data-index') || '0', 10)
+          return indexA - indexB
+        })
+        return items.map(item => item.getBoundingClientRect().height)
+      })
+    }
+
+    // 用获取的高度（如果有）生成最终 HTML
+    const html = buildHtml(updates, groupName, config, icons, fontCss, cardHeights)
 
     await page.setViewport({
       width: viewportWidth,
@@ -431,8 +608,14 @@ export async function renderPuppeteerImage(ctx: Context, config: Config, updates
       deviceScaleFactor: viewportScale,
     })
 
+    const imageType = config.puppeteerImageType || 'jpeg'
+    const quality = (imageType === 'jpeg' || imageType === 'webp') 
+      ? (config.puppeteerImageQuality || 75) 
+      : undefined
+
     const buffer = await page.screenshot({
-      type: 'png',
+      type: imageType,
+      quality,
       clip,
     })
 
