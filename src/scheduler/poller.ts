@@ -104,6 +104,24 @@ export class PollScheduler {
   }
 
   /**
+   * 检查更新（公开方法，供手动触发）
+   */
+  async triggerCheck(group: MonitorGroup): Promise<number> {
+    this.logger.info(`手动触发检查: ${group.name}`)
+    const task = this.tasks.get(group.name)
+    if (!task) {
+      this.logger.warn(`监控组 ${group.name} 未启动，无法检查`)
+      return 0
+    }
+    
+    const beforeCount = task.pendingUpdates.length
+    await this.checkUpdates(group)
+    const newCount = task.pendingUpdates.length - beforeCount
+    this.logger.info(`检查完成: ${group.name}，发现 ${newCount} 个新更新`)
+    return newCount
+  }
+
+  /**
    * 检查更新
    */
   private async checkUpdates(group: MonitorGroup): Promise<void> {
@@ -263,9 +281,67 @@ export class PollScheduler {
     const task = this.tasks.get(groupName)
     if (!task) return []
     
-    const updates = [...task.pendingUpdates]
+    const rawUpdates = [...task.pendingUpdates]
     task.pendingUpdates = []
-    return updates
+    
+    // 先按仓库 URL 合并同一仓库的多次更新
+    const mergedByRepo = new Map<string, RepoUpdate>()
+    
+    for (const update of rawUpdates) {
+      const key = update.repo.url
+      const existing = mergedByRepo.get(key)
+      
+      if (!existing) {
+        mergedByRepo.set(key, { ...update })
+      } else {
+        // 合并同类型的更新
+        if (update.type === 'commits' && existing.type === 'commits') {
+          // 合并 commits，按时间降序排列（最新的在前）
+          const allCommits = [...(existing.commits || []), ...(update.commits || [])]
+          allCommits.sort((a, b) => b.date.getTime() - a.date.getTime())
+          // 去重（按 sha）
+          const seen = new Set<string>()
+          existing.commits = allCommits.filter(c => {
+            if (seen.has(c.sha)) return false
+            seen.add(c.sha)
+            return true
+          })
+        } else if (update.type === 'releases' && existing.type === 'releases') {
+          // 合并 releases，按发布时间降序排列
+          const allReleases = [...(existing.releases || []), ...(update.releases || [])]
+          allReleases.sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime())
+          // 去重（按 tagName）
+          const seen = new Set<string>()
+          existing.releases = allReleases.filter(r => {
+            if (seen.has(r.tagName)) return false
+            seen.add(r.tagName)
+            return true
+          })
+        }
+        // 更新时间取最新的
+        if (update.updateTime > existing.updateTime) {
+          existing.updateTime = update.updateTime
+        }
+      }
+    }
+    
+    // 应用 maxUpdatesPerRepo 限制：每个仓库最多保留最新的 n 条更新
+    const maxPerRepo = this.config.maxUpdatesPerRepo ?? 1
+    return Array.from(mergedByRepo.values()).map(update => {
+      if (update.type === 'commits' && update.commits && update.commits.length > maxPerRepo) {
+        return {
+          ...update,
+          commits: update.commits.slice(0, maxPerRepo),
+        }
+      }
+      if (update.type === 'releases' && update.releases && update.releases.length > maxPerRepo) {
+        return {
+          ...update,
+          releases: update.releases.slice(0, maxPerRepo),
+        }
+      }
+      return update
+    })
   }
 
   /**

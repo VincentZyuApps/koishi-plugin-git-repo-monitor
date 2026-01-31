@@ -167,6 +167,8 @@ export interface Config {
   // ========== ⏰ 被动定时推送配置 ==========
   /** 监控组列表 */
   monitorGroups: any[]
+  /** 每个仓库每次推送最多显示的更新条数 */
+  maxUpdatesPerRepo: number
   /** 被动消息触发的输出形式 */
   passiveOutputModes: OutputMode[]
   /** 插件启动时是否立即执行一次轮询检查 */
@@ -177,6 +179,8 @@ export interface Config {
   activeOutputModes: OutputMode[]
   /** 指令触发的回复是否引用原消息 */
   quoteCommandReplies: boolean
+  /** 默认推送模式 */
+  defaultPushMode: 'last' | 'new'
 
   // ========== 🧩 Typst 渲染配置 ==========
   /** Typst 字体路径 */
@@ -275,6 +279,11 @@ export const Config: Schema<Config> = Schema.intersect([
         },
       ])
       .description('📋 监控组列表'),
+    maxUpdatesPerRepo: Schema.number()
+      .min(1)
+      .max(99)
+      .default(1)
+      .description('🗂️ 每个仓库每次推送最多显示的更新条数（如 Chromium 等频繁更新的仓库，可限制只推送最新的 n 条）'),
     passiveOutputModes: createOutputModeSchema(['text', 'puppeteer-image', 'typst-image', 'forward'])
       .default(['puppeteer-image', 'forward'])
       .description('📤 定时推送时的输出形式（可多选）'),
@@ -290,6 +299,13 @@ export const Config: Schema<Config> = Schema.intersect([
     quoteCommandReplies: Schema.boolean()
       .default(true)
       .description('💬 是否引用触发消息发送回复（forward 输出不支持引用）'),
+    defaultPushMode: Schema.union([
+      Schema.const('last').description('🔄 last：强制推送所有仓库的最新状态（无论是否有新更新）'),
+      Schema.const('new') .description('✨ new：仅推送自上次检查以来的新增更新'),
+    ])
+      .role('radio')
+      .default('last')
+      .description('🎯 git-monitor.push 指令的默认推送模式（未指定 -m 参数时使用）'),
   }).description('👋 主动指令触发配置'),
 
   Schema.object({

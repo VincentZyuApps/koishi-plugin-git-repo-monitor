@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-git-repo-monitor",
   "description": "监控 Git 仓库变化并推送通知到指定频道，支持 Typst 和 puppeteer 渲染",
-  "version": "0.2.0-alpha.1+20260127",
+  "version": "0.2.0-alpha.2+20260131",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [

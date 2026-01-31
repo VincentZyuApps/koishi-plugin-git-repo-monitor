@@ -297,8 +297,8 @@ export function apply(ctx: Context, config: Config) {
       
       try {
         if (session) await session.send(formatCommandReply(session, `🔍 开始检查 ${group}...`))
-        // 手动触发检查的逻辑可以在这里实现
-        return formatCommandReply(session, '✅ 检查完成')
+        const newCount = await pollScheduler.triggerCheck(monitorGroup)
+        return formatCommandReply(session, `✅ 检查完成，发现 ${newCount} 个新更新`)
       } catch (error) {
         logger.error(`手动检查失败:`, error)
         return formatCommandReply(session, `❌ 检查失败: ${(error as Error).message || String(error)}`)
@@ -306,7 +306,7 @@ export function apply(ctx: Context, config: Config) {
     })
 
   ctx.command('git-monitor.push <group:string>', '手动触发推送')
-    .option('mode', '-m <mode:string> 推送模式：last (最新一条) 或 new (新增)', { fallback: 'new' })
+    .option('mode', '-m <mode:string> 推送模式：last (最新状态) 或 new (新增)')
     .action(async ({ session, options }, group) => {
       if (!group) {
         return formatCommandReply(session, '请指定监控组名称')
@@ -314,11 +314,12 @@ export function apply(ctx: Context, config: Config) {
       
       const verboseLog = config.verboseSessionLog
       const quoteContext = buildQuoteContext(session)
+      const mode = (options?.mode as 'new' | 'last') || config.defaultPushMode
       try {
         if (verboseLog && session) {
-          await session.send(formatCommandReply(session, `📤 开始推送 ${group}...`))
+          await session.send(formatCommandReply(session, `📤 开始推送 ${group} (模式: ${mode})...`))
         }
-        await pushScheduler.triggerPush(group, options?.mode as 'new' | 'last', { quoteContext })
+        await pushScheduler.triggerPush(group, mode, { quoteContext })
         return formatCommandReply(session, verboseLog ? '✅ 推送完成' : '✅ 完成')
       } catch (error) {
         logger.error(`手动推送失败:`, error)
