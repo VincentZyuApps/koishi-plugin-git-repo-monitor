@@ -105,7 +105,8 @@ export const RepoConfigSchema = Schema.object({
 export const MonitorGroupSchema = Schema.object({
   name: Schema.string()
     .required()
-    .description('监控组名称（用于标识）'),
+    .description('监控组名称（⚠️ 必须唯一，作为系统内部标识符，重名将导致后续同名组被忽略）'),
+  // ↑ name 是核心业务主键：用于 Map 索引、指令查找（git-monitor.check <组名>）、数据库持久化等
   pushTargets: Schema.array(PushTargetSchema)
     .required()
     .role('table')
@@ -260,7 +261,7 @@ export const Config: Schema<Config> = Schema.intersect([
         {
           name: 'qwq',
           pushTargets: [
-            { name: 'qwq', platform: 'onebot', channelId: '259248174', enabled: true },
+            { name: 'qwq-channel-1', platform: 'onebot', channelId: '259248174', enabled: true },
           ],
           repos: exampleRepoList,
           pollCron: '0 * * * *',
@@ -270,7 +271,7 @@ export const Config: Schema<Config> = Schema.intersect([
         {
           name: 'awa',
           pushTargets: [
-            { name: 'awa', platform: 'onebot', channelId: '259248174', enabled: true },
+            { name: 'awa-channel-1', platform: 'onebot', channelId: '259248174', enabled: true },
           ],
           repos: exampleRepoList2,
           pollCron: '0 * * * *',
@@ -313,8 +314,10 @@ export const Config: Schema<Config> = Schema.intersect([
       .default('/home/bawuyinguo/SSoftwareFiles/fonts/LXGWWenKaiMono-Medium.ttf')
       .description('🔡 Typst 字体文件绝对路径（推荐使用 LXGW WenKai Mono）'),
     typstDarkMode: Schema.boolean()
-      .default(true)
-      .description('🌓 Typst 启用深色模式（推荐，视觉效果更佳）'),
+      .default(false)
+      .experimental()
+      .disabled()
+      .description('🌓 Typst 启用深色模式（推荐，视觉效果更佳）</br> <i> 黑色模式还有些问题(</i> '),
     typstRenderScale: Schema.number()
       .default(1.3)
       .step(0.1)

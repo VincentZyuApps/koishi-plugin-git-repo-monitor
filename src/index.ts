@@ -28,6 +28,8 @@ export const usage = `
 
 监控 Git 仓库的提交和发布，并通过精美的 Typst 渲染卡片推送到指定频道。
 
+> ⚠️ **注意：每个监控组的名称（name）必须唯一！** 监控组名称是系统内部的唯一标识符，用于任务调度、指令查找和数据库存储。若存在重名，插件启动时将仅保留第一个，后续同名监控组会被忽略。
+
 ### ⚠️ 前置依赖
 
 必须先安装并启用以下插件：
@@ -148,6 +150,25 @@ declare module 'koishi' {
 
 export function apply(ctx: Context, config: Config) {
   const logger = ctx.logger('git-monitor')
+
+  // ============ 监控组名称去重检查 ============
+  {
+    const seen = new Set<string>()
+    const duplicates: string[] = []
+    const deduped: typeof config.monitorGroups = []
+    for (const group of config.monitorGroups ?? []) {
+      if (seen.has(group.name)) {
+        duplicates.push(group.name)
+      } else {
+        seen.add(group.name)
+        deduped.push(group)
+      }
+    }
+    if (duplicates.length > 0) {
+      logger.warn(`⚠️ 检测到重复的监控组名称: [${duplicates.join(', ')}]，重复的监控组已被忽略，仅保留首次出现的配置。请确保每个监控组名称唯一！`)
+      config.monitorGroups = deduped
+    }
+  }
 
   // ============ 数据库扩展 ============
   ctx.model.extend('git_repo_state', {
