@@ -1,6 +1,22 @@
+![koishi-plugin-git-repo-monitor](https://socialify.git.ci/VincentZyuApps/koishi-plugin-git-repo-monitor/image?custom_description=%E7%9B%91%E6%8E%A7+Git+%E4%BB%93%E5%BA%93%E7%9A%84%E6%8F%90%E4%BA%A4%E5%92%8C%E5%8F%91%E5%B8%83%EF%BC%8C%E8%87%AA%E5%8A%A8%E6%8E%A8%E9%80%81%E5%9B%BE%E7%89%87%E5%8D%A1%E7%89%87%E5%88%B0%E6%8C%87%E5%AE%9A%E9%85%8D%E7%BD%AE%E9%A2%91%E9%81%93+%F0%9F%8E%A8+%EF%BC%88%E7%9B%AE%E5%89%8D%E6%94%AF%E6%8C%81github%E5%92%8Cgitee%EF%BC%89+&description=1&font=Bitter&forks=1&issues=1&language=1&logo=https%3A%2F%2Fupload.wikimedia.org%2Fwikipedia%2Fcommons%2Ff%2Ff3%2FKoishi.js_Logo.png%3F_%3D20230331182243&name=1&owner=1&pulls=1&stargazers=1&theme=Auto)
+
 # koishi-plugin-git-repo-monitor
 
+[![npm](https://img.shields.io/npm/v/koishi-plugin-git-repo-monitor?style=flat-square)](https://www.npmjs.com/package/koishi-plugin-git-repo-monitor)
+[![npm-download](https://img.shields.io/npm/dm/koishi-plugin-git-repo-monitor?style=flat-square)](https://www.npmjs.com/package/koishi-plugin-git-repo-monitor)
+[![GitHub](https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/VincentZyuApps/koishi-plugin-git-repo-monitor)
+[![Gitee](https://img.shields.io/badge/Gitee-C71D23?style=for-the-badge&logo=gitee&logoColor=white)](https://gitee.com/vincent-zyu/koishi-plugin-git-repo-monitor)
+
+<p>💬 插件使用问题 / 🐛 Bug反馈 / 👨‍💻 插件开发交流，欢迎加入QQ群：<b>1085190201</b> 🎉</p>
+<p>💡 在群里直接艾特我，回复的更快哦~ ✨</p>
+
+---
+
 监控 Git 仓库变化并推送通知到指定频道，支持 Typst 渲染精美卡片。
+
+## 效果预览
+
+![瀑布流渲染效果](doc/masonry-preview.png)
 
 ## 功能特性
 
@@ -67,6 +83,22 @@ plugins:
 | `git-monitor.check <组名>` | 手动触发检查 | `git-monitor.check qwq` |
 | `git-monitor.push <组名> [-m mode]` | 手动触发推送<br>• `-m new` (默认): 仅推送新更新<br>• `-m last`: 强制推送最新状态 | `git-monitor.push qwq`<br>`git-monitor.push qwq -m last` |
 | `git-monitor.list` | 列出所有监控仓库 | `git-monitor.list` |
+
+## Cron 表达式
+
+**常用示例：**
+
+- `*/10 * * * *` - 每 10 分钟执行一次
+- `0 */2 * * *` - 每 2 小时执行一次
+- `0 9,12,18 * * *` - 每天 9:00、12:00、18:00 执行
+- `0 0 * * *` - 每天 0:00 执行
+
+**相关资源：**
+
+- [【Crontab Guru】 - https://crontab.guru/](https://crontab.guru/) - 在线 Cron 表达式编辑器和可视化工具
+- [【Cronitor Cron Jobs Guide】 - https://cronitor.io/guides/cron-jobs](https://cronitor.io/guides/cron-jobs) - Cron 任务完整指南
+- [【Man Page: crontab(5)】 - https://man7.org/linux/man-pages/man5/crontab.5.html](https://man7.org/linux/man-pages/man5/crontab.5.html) - Crontab 官方文档
+- [【Wikipedia: Cron】 - https://en.wikipedia.org/wiki/Cron](https://en.wikipedia.org/wiki/Cron) - Cron 维基百科
 
 ## 数据库设计
 
@@ -149,10 +181,10 @@ src/
 
 ## License
 
-MIT
+GPL-3.0
 
 ### 致谢
 
-本项目的设计灵感来源于 [DF-Plugin](https://gitee.com/DenFengLai/DF-Plugin)，感谢原作者的开源贡献。
+本项目的设计灵感来源于 [【DF-Plugin】 - https://gitee.com/DenFengLai/DF-Plugin](https://gitee.com/DenFengLai/DF-Plugin)，感谢原作者的开源贡献。
 
-按照惯例，本项目遵循上游的 MIT 协议并开源。
+按照惯例，本项目遵循上游的 GPL-3.0 协议并开源。

@@ -118,10 +118,10 @@ export const MonitorGroupSchema = Schema.object({
     .description('监听的仓库列表'),
   pollCron: Schema.string()
     .default('0 * * * *')
-    .description('轮询 Cron 表达式（检查更新频率）'),
+    .description('轮询 Cron 表达式（检查更新频率）<br/>📌 常用示例：<br/>• `* * * * *` - 每分钟<br/>• `*/5 * * * *` - 每 5 分钟<br/>• `*/10 * * * *` - 每 10 分钟<br/>• `*/30 * * * *` - 每 30 分钟<br/>• `0 * * * *` - 每小时（整点）'),
   pushCron: Schema.string()
     .default('0 */12 * * *')
-    .description('推送 Cron 表达式（推送通知频率）'),
+    .description('推送 Cron 表达式（推送通知频率）<br/>📌 常用示例：<br/>• `0 * * * *` - 每小时（整点）<br/>• `0 */2 * * *` - 每 2 小时<br/>• `0 */6 * * *` - 每 6 小时<br/>• `0 */12 * * *` - 每 12 小时<br/>• `0 0 * * *` - 每天 0:00'),
   enabled: Schema.boolean()
     .default(true)
     .description('是否启用此监控组'),
@@ -261,7 +261,8 @@ export const Config: Schema<Config> = Schema.intersect([
         {
           name: 'qwq',
           pushTargets: [
-            { name: 'qwq-channel-1', platform: 'onebot', channelId: '259248174', enabled: true },
+            { name: 'qwq-channel-1', platform: 'onebot', channelId: '1085190201', enabled: true },
+            { name: 'qwq-channel-2', platform: 'onebot', channelId: '958366323',  enabled: true },
           ],
           repos: exampleRepoList,
           pollCron: '0 * * * *',
@@ -271,7 +272,8 @@ export const Config: Schema<Config> = Schema.intersect([
         {
           name: 'awa',
           pushTargets: [
-            { name: 'awa-channel-1', platform: 'onebot', channelId: '259248174', enabled: true },
+            { name: 'awa-channel-1', platform: 'onebot', channelId: '1085190201', enabled: true },
+            { name: 'awa-channel-2', platform: 'onebot', channelId: '958366323',  enabled: true },
           ],
           repos: exampleRepoList2,
           pollCron: '0 * * * *',

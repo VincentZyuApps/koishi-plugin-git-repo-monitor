@@ -138,6 +138,13 @@ export const usage = `
 - \`0 */2 * * *\` - 每 2 小时执行一次
 - \`0 9,12,18 * * *\` - 每天 9:00、12:00、18:00 执行
 - \`0 0 * * *\` - 每天 0:00 执行
+
+**🔗 相关资源：**
+
+- [【Crontab Guru】 - https://crontab.guru/](https://crontab.guru/) - 在线 Cron 表达式编辑器和可视化工具
+- [【Cronitor Cron Jobs Guide】 - https://cronitor.io/guides/cron-jobs](https://cronitor.io/guides/cron-jobs) - Cron 任务完整指南
+- [【Man Page: crontab(5)】 - https://man7.org/linux/man-pages/man5/crontab.5.html](https://man7.org/linux/man-pages/man5/crontab.5.html) - Crontab 官方文档
+- [【Wikipedia: Cron】 - https://en.wikipedia.org/wiki/Cron](https://en.wikipedia.org/wiki/Cron) - Cron 维基百科
 `
 
 // 声明数据库表
