@@ -7,6 +7,7 @@
 [![GitHub](https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/VincentZyuApps/koishi-plugin-git-repo-monitor)
 [![Gitee](https://img.shields.io/badge/Gitee-C71D23?style=for-the-badge&logo=gitee&logoColor=white)](https://gitee.com/vincent-zyu/koishi-plugin-git-repo-monitor)
 
+<p><del>💬 插件使用问题 / 🐛 Bug反馈 / 👨‍💻 插件开发交流，欢迎加入QQ群：<b>259248174</b>   🎉（这个群G了</del> </p> 
 <p>💬 插件使用问题 / 🐛 Bug反馈 / 👨‍💻 插件开发交流，欢迎加入QQ群：<b>1085190201</b> 🎉</p>
 <p>💡 在群里直接艾特我，回复的更快哦~ ✨</p>
 
@@ -16,7 +17,23 @@
 
 ## 效果预览
 
-![瀑布流渲染效果](doc/masonry-preview.png)
+### Puppeteer 渲染（瀑布流布局）
+
+![Puppeteer 瀑布流渲染效果](doc/puppeteer-masonry-preview.png)
+
+> 💡 **Puppeteer 渲染**：样式更精美，但出图较慢，占用资源较多
+
+### Typst 渲染
+
+![Typst 渲染效果](doc/typst-preview.png)
+
+> ⚡ **Typst 渲染**：出图快速，节省资源，但样式相对简单
+
+### 合并转发（Forward）
+
+![合并转发效果](doc/forward-preview.png)
+
+> 📨 **合并转发**：仅支持 OneBot 平台，将多条消息合并为一条转发消息
 
 ## 功能特性
 
@@ -28,42 +45,57 @@
 - 📦 **模块化设计**: 清晰的代码结构，易于扩展和维护
 
 ## 可选依赖
-- `puppeteer` - 浏览器排版截图服务
-- `to-image-service` - 图片转换服务
-- `w-node` - Node.js 模块加载支持
+
+- `database` - 数据库服务（必需）
+- `puppeteer` - Puppeteer 图片渲染（模式：puppeteer-image）
+- `to-image-service` + `w-node` - Typst 图片渲染（模式：typst-image）
+- `onebot` - 合并转发功能（模式：forward）
 
 ## 配置说明
 
 ### 基础配置
 
-- **fontPath**: 字体文件绝对路径（推荐使用 LXGW WenKai Mono）
+- **typstFontPath**: Typst 渲染字体文件绝对路径（推荐使用 LXGW WenKai Mono）
+- **puppeteerFontPath**: Puppeteer 渲染字体文件绝对路径（可选）
 - **maxCommitsPerPush**: 单次推送最大显示提交数（默认 10）
 
 ### 监控组配置
 
 每个监控组包含：
 
-- **name**: 监控组名称（用于标识）
-- **platform**: 推送平台（如 `onebot`）
-- **channelId**: 推送频道 ID
+- **name**: 监控组名称（用于标识，⚠️ 必须唯一）
+- **pushTargets**: 推送目标列表（支持多个推送目标）
+  - **name**: 推送目标名称（用于标识）
+  - **platform**: 推送平台（如 `onebot`、`discord` 等）
+  - **channelId**: 推送频道 ID
+  - **enabled**: 是否启用此推送目标（默认 true）
 - **repos**: 仓库列表
   - **url**: 仓库地址（支持 GitHub、Gitee 等）
   - **branch**: 分支名称（默认 `main`）
   - **type**: 监听类型（`commits` 或 `releases`）
 - **pollCron**: 轮询 Cron 表达式（检查更新频率）
 - **pushCron**: 推送 Cron 表达式（推送通知频率）
+- **enabled**: 是否启用此监控组（默认 true）
 
 ## 使用示例
 
 ```yaml
 plugins:
   git-repo-monitor:
-    fontPath: /path/to/LXGWWenKaiMono-Regular.ttf
+    typstFontPath: /path/to/LXGWWenKaiMono-Regular.ttf
+    puppeteerFontPath: /path/to/LXGWWenKaiMono-Regular.ttf
     maxCommitsPerPush: 10
     monitorGroups:
       - name: Koishi 生态监控
-        platform: onebot
-        channelId: '123456789'
+        pushTargets:
+          - name: QQ群推送
+            platform: onebot
+            channelId: '123456789'
+            enabled: true
+          - name: Discord推送
+            platform: discord
+            channelId: '987654321'
+            enabled: true
         repos:
           - url: https://github.com/koishijs/koishi
             branch: main
@@ -73,6 +105,7 @@ plugins:
             type: releases
         pollCron: '*/10 * * * *'  # 每 10 分钟检查一次
         pushCron: '0 */2 * * *'   # 每 2 小时推送一次
+        enabled: true
 ```
 
 ## 命令
@@ -82,6 +115,7 @@ plugins:
 | `git-monitor` | 查看监控状态 | `git-monitor` |
 | `git-monitor.check <组名>` | 手动触发检查 | `git-monitor.check qwq` |
 | `git-monitor.push <组名> [-m mode]` | 手动触发推送<br>• `-m new` (默认): 仅推送新更新<br>• `-m last`: 强制推送最新状态 | `git-monitor.push qwq`<br>`git-monitor.push qwq -m last` |
+| `git-monitor.dryrun [-n count]` | 使用硬编码假数据测试推送<br>• `-n <数量>`: 指定仓库数量 (1-30)<br>• 默认 15 个仓库 | `git-monitor.dryrun`<br>`git-monitor.dryrun -n 20` |
 | `git-monitor.list` | 列出所有监控仓库 | `git-monitor.list` |
 
 ## Cron 表达式
@@ -151,18 +185,20 @@ plugins:
 
 ```
 src/
-├── index.ts           # 插件入口
-├── config.ts          # 配置定义
-├── types.ts           # 类型定义
+├── index.ts              # 插件入口
+├── config.ts             # 配置定义
+├── types.ts              # 类型定义
 ├── services/
-│   ├── git.ts         # Git 服务
-│   └── renderer.ts    # Typst 渲染服务
+│   ├── git.ts            # Git API 服务
+│   ├── renderer-typst.ts # Typst 渲染服务
+│   ├── render-puppeteer.ts # Puppeteer 渲染服务
+│   ├── render-forward.ts   # 合并转发服务
+│   └── render-text.ts      # 文本渲染服务
 ├── scheduler/
-│   ├── poller.ts      # 轮询调度器
-│   └── pusher.ts      # 推送调度器
+│   ├── poller.ts         # 轮询调度器
+│   └── pusher.ts         # 推送调度器
 └── utils/
-    ├── formatter.ts   # 数据格式化
-    └── storage.ts     # 数据存储
+    └── storage.ts        # 数据存储
 ```
 
 ## 分支名检查机制

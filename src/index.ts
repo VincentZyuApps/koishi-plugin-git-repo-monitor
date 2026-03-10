@@ -81,6 +81,13 @@ export const usage = `
   <td><code>git-monitor.push qwq</code><br><code>git-monitor.push qwq -m last</code></td>
 </tr>
 <tr>
+  <td><code>git-monitor.dryrun [-n count]</code></td>
+  <td>使用硬编码假数据测试推送<br>
+  • <code>-n &lt;数量&gt;</code>: 指定仓库数量 (1-30)<br>
+  • 默认 15 个仓库</td>
+  <td><code>git-monitor.dryrun</code><br><code>git-monitor.dryrun -n 20</code></td>
+</tr>
+<tr>
   <td><code>git-monitor.list</code></td>
   <td>列出所有监控仓库</td>
   <td><code>git-monitor.list</code></td>
@@ -384,7 +391,12 @@ export function apply(ctx: Context, config: Config) {
       const lines = ['📋 监控仓库列表\n']
       
       for (const group of config.monitorGroups) {
-        lines.push(`📦 ${group.name} (${group.platform}:${group.channelId})`)
+        // 显示所有推送目标
+        const targets = group.pushTargets
+          .filter((t: any) => t.enabled !== false)
+          .map((t: any) => `{${t.platform}:${t.channelId}}`)
+          .join(', ')
+        lines.push(`📦 ${group.name} → [${targets || '无推送目标'}]`)
         
         for (const repo of group.repos) {
           const typeIcon = repo.type === 'commits' ? '📝' : '🎉'

@@ -2,7 +2,8 @@ import { Context } from 'koishi'
 import fs from 'node:fs'
 import path from 'node:path'
 import { Config } from '../config'
-import { RepoUpdate } from '../types'
+import { RepoUpdate, PLUGIN_REPO_URL } from '../types'
+import { formatTimestamp, formatDateTime } from '../utils/format'
 
 function escapeHtml(text: string) {
   return text
@@ -473,7 +474,7 @@ function buildHtml(updates: RepoUpdate[], groupName: string, config: Config, ico
   <div class="container">
     <div class="head_box">
       <div class="id_text">Git仓库更新推送</div>
-      <div class="subline">${escapeHtml(groupName)} · ${escapeHtml(new Date().toLocaleString('zh-CN'))}</div>
+      <div class="subline">${escapeHtml(groupName)} · ${escapeHtml(formatDateTime())}</div>
       <div class="count_line">本次发送 ${repoCount} 个仓库</div>
     </div>
     <div class="data_box">
@@ -481,7 +482,11 @@ function buildHtml(updates: RepoUpdate[], groupName: string, config: Config, ico
         ${listContent}
       </div>
     </div>
-    <div class="footer">Created By Koishi Git Monitor</div>
+    <div class="footer">
+      <div>${escapeHtml(config.puppeteerFooterText)}</div>
+      <div style="font-size: 10px; margin-top: 4px;">${PLUGIN_REPO_URL}</div>
+      <div style="font-size: 10px; margin-top: 2px;">${formatTimestamp()}</div>
+    </div>
   </div>
 </body>
 </html>`

@@ -3,6 +3,11 @@
  */
 
 /**
+ * 插件仓库地址
+ */
+export const PLUGIN_REPO_URL = 'https://github.com/VincentZyuApps/koishi-plugin-git-repo-monitor'
+
+/**
  * 仓库配置
  */
 export interface RepoConfig {

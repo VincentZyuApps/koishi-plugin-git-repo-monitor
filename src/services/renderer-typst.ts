@@ -1,5 +1,6 @@
 import { Context } from 'koishi'
-import { RepoUpdate } from '../types'
+import { RepoUpdate, PLUGIN_REPO_URL } from '../types'
+import { formatTimestamp } from '../utils/format'
 import { Config } from '../config'
 import type { NodeCompiler, NodeAddFontBlobs } from '@myriaddreamin/typst-ts-node-compiler'
 import type { Font, FontFormat } from 'koishi-plugin-to-image-service'
@@ -435,7 +436,11 @@ ${repoSections}
 
 // 底部信息
 #align(center)[
-  #text(size: 9pt, fill: ${t.textTertiary})[Created By Koishi Git Monitor · ${updateTime}]
+  #text(size: 9pt, fill: ${t.textTertiary})[${this.config.typstFooterText}]
+  #v(4pt)
+  #text(size: 8pt, fill: ${t.textTertiary})[${PLUGIN_REPO_URL}]
+  #v(2pt)
+  #text(size: 8pt, fill: ${t.textTertiary})[${formatTimestamp()}]
 ]
 `
   }
