@@ -2,8 +2,11 @@ import { Context } from 'koishi'
 import { RepoUpdate, PLUGIN_REPO_URL } from '../types'
 import { formatTimestamp } from '../utils/format'
 import { Config } from '../config'
+import path from 'node:path'
+import fs from 'node:fs'
 import type { NodeCompiler, NodeAddFontBlobs } from '@myriaddreamin/typst-ts-node-compiler'
-import type { Font, FontFormat } from 'koishi-plugin-to-image-service'
+import {} from 'koishi-plugin-to-image-service'
+import {} from 'koishi-plugin-w-node'
 
 /**
  * GitHub SVG 图标 (白色版本，用于深色主题)
@@ -93,13 +96,11 @@ const LIGHT_THEME: ThemeColors = {
 
 /**
  * Typst 渲染器服务
- * 直接使用 w-node 和 to-image-service，不依赖 typst-to-image-service
+ * 使用 typst-to-image-service 进行渲染
  */
 export class TypstRenderer {
   private typst: typeof import('@myriaddreamin/typst-ts-node-compiler') | null = null
   private compiler: NodeCompiler | null = null
-  private lastFonts: Font[] = []
-  private readonly fontFormats: FontFormat[] = ['ttf', 'otf']
   private readonly typstModuleName = '@myriaddreamin/typst-ts-node-compiler'
 
   constructor(
@@ -141,6 +142,12 @@ export class TypstRenderer {
    * 初始化 Typst 编译器（需要在 ready 事件后调用）
    */
   async init(): Promise<void> {
+    if (!this.ctx.node) {
+      throw new Error('w-node 服务未启用，无法使用 Typst 渲染')
+    }
+    if (!this.ctx.toImageService) {
+      throw new Error('to-image-service 服务未启用，无法使用 Typst 渲染')
+    }
     this.typst = await this.ctx.node.safeImport(this.typstModuleName)
     this.ctx.logger('git-monitor').info('Typst 模块加载成功')
   }
@@ -153,21 +160,29 @@ export class TypstRenderer {
       throw new Error('Typst 模块未初始化，请先调用 init()')
     }
 
-    const fonts = this.ctx.toImageService.fontManagement.getFonts(this.fontFormats)
+    // 尝试加载自定义字体
+    const fontArgs: NodeAddFontBlobs[] = []
+    const customFontPath = this.config.typstFontPath
+    if (customFontPath && fs.existsSync(customFontPath)) {
+      try {
+        const customFontBuffer = fs.readFileSync(customFontPath)
+        fontArgs.push({
+          fontBlobs: [customFontBuffer],
+        })
+        this.ctx.logger('git-monitor').info(`已加载字体: ${customFontPath}`)
+      } catch (error) {
+        this.ctx.logger('git-monitor').error('加载字体失败:', error)
+      }
+    } else if (customFontPath) {
+      this.ctx.logger('git-monitor').warn(`字体文件不存在: ${customFontPath}`)
+    }
     
-    // 检查字体是否变化，如果变化则重新创建编译器
-    if (
-      !this.compiler ||
-      fonts.length !== this.lastFonts.length ||
-      (fonts.length > 0 && fonts.some(f => !this.lastFonts.some(lf => lf.data === f.data)))
-    ) {
+    // 创建编译器
+    if (!this.compiler) {
       this.compiler = this.typst.NodeCompiler.create({
-        fontArgs: fonts.map(font => ({
-          fontBlobs: [font.data],
-        }) as NodeAddFontBlobs),
+        fontArgs: fontArgs,
       })
-      this.lastFonts = fonts
-      this.ctx.logger('git-monitor').debug(`Typst 编译器已创建，加载了 ${fonts.length} 个字体`)
+      this.ctx.logger('git-monitor').debug(`Typst 编译器已创建，加载了 ${fontArgs.length} 个字体`)
     }
     
     return this.compiler
@@ -191,10 +206,14 @@ export class TypstRenderer {
    */
   private async toPng(content: string): Promise<Buffer> {
     const svg = this.toSvg(content)
-    const result = await this.ctx.toImageService.svgToImage.resvg(svg, {
-      options: {
-        fitTo: { mode: 'zoom', value: this.config.typstRenderScale || 1.3 },
-      },
+    
+    if (!this.ctx.toImageService?.sharpRenderer) {
+      throw new Error('toImageService.sharpRenderer 尚未就绪')
+    }
+    
+    const result = await this.ctx.toImageService.sharpRenderer.render({
+      source: Buffer.from(svg),
+      format: 'png',
     })
     return Buffer.from(result)
   }
@@ -463,7 +482,7 @@ ${repoSections}
     } catch (error) {
       this.ctx.logger('git-monitor').error('批量渲染失败:', error)
       this.ctx.logger('git-monitor').error('Typst 代码片段:\n' + typstCode.substring(0, 500))
-      throw error
+      return null
     }
   }
 

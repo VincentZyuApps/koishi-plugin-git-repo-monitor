@@ -10,6 +10,7 @@ import { StorageManager } from './utils/storage'
 
 // 导入类型声明
 import {} from 'koishi-plugin-to-image-service'
+import {} from 'koishi-plugin-typst-to-image-service'
 import {} from 'koishi-plugin-w-node'
 import {} from 'koishi-plugin-puppeteer'
 
@@ -18,10 +19,11 @@ export const name = 'git-repo-monitor'
 // 声明插件依赖的服务
 export const inject = {
   required: ['database'],
-  optional: ['http', 'toImageService', 'node', 'puppeteer'],
+  optional: ['http', 'toImageService', 'typstToImageService', 'node', 'puppeteer'],
 }
 
 export { Config }
+
 
 export const usage = `
 ## 📦 Git 仓库监控插件
@@ -237,26 +239,6 @@ export function apply(ctx: Context, config: Config) {
 
   // ============ 加载字体并初始化 Typst ============
   ctx.on('ready', async () => {
-    // 加载字体
-    if (ctx.toImageService && config.typstFontPath && fs.existsSync(config.typstFontPath)) {
-      try {
-        const fontData = fs.readFileSync(config.typstFontPath)
-        ctx.toImageService.fontManagement.addFont([{
-          data: fontData,
-          name: 'LXGW WenKai Mono',
-          format: 'ttf' as const,
-          filePath: config.typstFontPath,
-        }])
-        logger.info(`已加载字体: ${config.typstFontPath}`)
-      } catch (error) {
-        logger.error('加载字体失败:', error)
-      }
-    } else if (!ctx.toImageService && config.typstFontPath) {
-      logger.warn('未启用 to-image-service，无法加载字体，Typst 图片渲染将不可用')
-    } else if (config.typstFontPath) {
-      logger.warn(`字体文件不存在: ${config.typstFontPath}`)
-    }
-    
     // 初始化 Typst 编译器
     if (ctx.node && ctx.toImageService) {
       try {

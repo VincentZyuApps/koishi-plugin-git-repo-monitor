@@ -158,20 +158,28 @@ export class PushScheduler {
       }
 
       if (modes.includes('typst-image')) {
-        const image = await this.renderer.renderBatchUpdates(updates, group.name)
-        if (image) {
-          messages.push(h.image(image, 'image/png'))
-        } else {
-          this.logger.warn(`Typst 图片渲染失败: ${group.name}`)
+        try {
+          const image = await this.renderer.renderBatchUpdates(updates, group.name)
+          if (image) {
+            messages.push(h.image(image, 'image/png'))
+          } else {
+            this.logger.warn(`Typst 图片渲染失败: ${group.name}`)
+          }
+        } catch (error) {
+          this.logger.error(`Typst 渲染异常: ${(error as Error).message}`)
         }
       }
 
       if (modes.includes('puppeteer-image')) {
-        const image = await renderPuppeteerImage(this.ctx, this.config, updates, group.name)
-        if (image) {
-          messages.push(h.image(image, 'image/png'))
-        } else {
-          this.logger.warn(`Puppeteer 图片渲染失败: ${group.name}`)
+        try {
+          const image = await renderPuppeteerImage(this.ctx, this.config, updates, group.name)
+          if (image) {
+            messages.push(h.image(image, 'image/png'))
+          } else {
+            this.logger.warn(`Puppeteer 图片渲染失败: ${group.name}`)
+          }
+        } catch (error) {
+          this.logger.error(`Puppeteer 渲染异常: ${(error as Error).message}`)
         }
       }
 

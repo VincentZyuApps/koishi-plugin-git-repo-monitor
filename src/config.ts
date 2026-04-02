@@ -164,6 +164,8 @@ export interface Config {
   showStats: boolean
   /** 是否静默启动 */
   silentStart: boolean
+  /** 并行获取仓库数量（设为 1 则串行获取） */
+  parallelFetchCount: number
 
   // ========== ⏰ 被动定时推送配置 ==========
   /** 监控组列表 */
@@ -256,6 +258,11 @@ export const Config: Schema<Config> = Schema.intersect([
     silentStart: Schema.boolean()
       .default(true)
       .description('🤫 静默启动（首次运行不推送）。⚠️ 若设为 false，插件启动时可能会将新添加仓库的当前状态视为更新并推送，导致消息刷屏。'),
+    parallelFetchCount: Schema.number()
+      .min(1)
+      .max(1024)
+      .default(8)
+      .description('🔀 并行获取仓库数量（设为 1 则串行获取，可加快轮询速度）'),
   }).description('⚙️ 基础配置'),
 
   Schema.object({
@@ -301,7 +308,7 @@ export const Config: Schema<Config> = Schema.intersect([
 
   Schema.object({
     activeOutputModes: createOutputModeSchema(['text', 'puppeteer-image', 'typst-image', 'forward'])
-      .default(['puppeteer-image', 'forward'])
+      .default(['puppeteer-image', 'typst-image', 'forward'])
       .description('📤 指令触发时的输出形式（可多选）'),
     quoteCommandReplies: Schema.boolean()
       .default(true)
@@ -318,6 +325,7 @@ export const Config: Schema<Config> = Schema.intersect([
   Schema.object({
     typstFontPath: Schema.string()
       .default('/home/bawuyinguo/SSoftwareFiles/fonts/LXGWWenKaiMono-Medium.ttf')
+      .role('textarea', { rows: [2, 5] })
       .description('🔡 Typst 字体文件绝对路径（推荐使用 LXGW WenKai Mono）'),
     typstDarkMode: Schema.boolean()
       .default(false)

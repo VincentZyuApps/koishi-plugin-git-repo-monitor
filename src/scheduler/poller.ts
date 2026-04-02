@@ -87,20 +87,39 @@ export class PollScheduler {
    * 获取监控组所有仓库的最新状态（不更新检查点）
    */
   async fetchLatestUpdates(group: MonitorGroup): Promise<RepoUpdate[]> {
-    const updates: RepoUpdate[] = []
-    
-    for (const repo of group.repos) {
+    const totalRepos = group.repos.length
+    const parallelCount = Math.max(1, this.config.parallelFetchCount || 1)
+
+    const processRepo = async (repo: MonitorGroup['repos'][0], index: number): Promise<RepoUpdate | null> => {
+      const progress = Math.round(((index + 1) / totalRepos) * 100)
+      this.logger.info(`正在获取仓库信息: ${repo.url} (${index + 1}/${totalRepos}, ${progress}%)`)
       try {
         const update = await this.getRepoLatestUpdate(repo)
-        if (update) {
-          updates.push(update)
-        }
+        return update
       } catch (error) {
         this.logger.error(`获取仓库最新状态失败 ${repo.url}:`, error)
+        return null
       }
     }
-    
-    return updates
+
+    let results: RepoUpdate[] = []
+
+    if (parallelCount === 1) {
+      for (let i = 0; i < group.repos.length; i++) {
+        const update = await processRepo(group.repos[i], i)
+        if (update) results.push(update)
+      }
+    } else {
+      for (let batchStart = 0; batchStart < group.repos.length; batchStart += parallelCount) {
+        const batch = group.repos.slice(batchStart, batchStart + parallelCount)
+        const batchResults = await Promise.all(
+          batch.map((repo, idx) => processRepo(repo, batchStart + idx))
+        )
+        results = results.concat(batchResults.filter((u): u is RepoUpdate => u !== null))
+      }
+    }
+
+    return results
   }
 
   /**
@@ -123,22 +142,49 @@ export class PollScheduler {
 
   /**
    * 检查更新
-   */
+    */
   private async checkUpdates(group: MonitorGroup): Promise<void> {
     this.logger.debug(`检查更新: ${group.name}`)
     
     const task = this.tasks.get(group.name)
     if (!task) return
     
-    for (const repo of group.repos) {
+    const totalRepos = group.repos.length
+    const parallelCount = Math.max(1, this.config.parallelFetchCount || 1)
+    
+    const processRepo = async (repo: MonitorGroup['repos'][0], index: number): Promise<RepoUpdate | null> => {
+      const progress = Math.round(((index + 1) / totalRepos) * 100)
+      this.logger.info(`正在获取仓库信息: ${repo.url} (${index + 1}/${totalRepos}, ${progress}%)`)
       try {
         const update = await this.checkRepoUpdate(repo)
         if (update) {
-          task.pendingUpdates.push(update)
           this.logger.info(`发现新更新: ${update.repoName} (${update.type})`)
         }
+        return update
       } catch (error) {
         this.logger.error(`检查仓库失败 ${repo.url}:`, error)
+        return null
+      }
+    }
+
+    if (parallelCount === 1) {
+      for (let i = 0; i < group.repos.length; i++) {
+        const update = await processRepo(group.repos[i], i)
+        if (update) {
+          task.pendingUpdates.push(update)
+        }
+      }
+    } else {
+      for (let batchStart = 0; batchStart < group.repos.length; batchStart += parallelCount) {
+        const batch = group.repos.slice(batchStart, batchStart + parallelCount)
+        const results = await Promise.all(
+          batch.map((repo, idx) => processRepo(repo, batchStart + idx))
+        )
+        for (const update of results) {
+          if (update) {
+            task.pendingUpdates.push(update)
+          }
+        }
       }
     }
   }
@@ -153,9 +199,6 @@ export class PollScheduler {
     const branch = repo.branch || 'main'
     
     if (repo.type === 'commits') {
-      if (this.config.verboseConsoleLog) {
-        this.logger.info(`正在获取仓库信息: ${repo.url}`)
-      }
       const commits = await this.gitService.getCommits(repo.url, branch)
       if (commits.length === 0) return null
       
@@ -168,9 +211,6 @@ export class PollScheduler {
         updateTime: new Date(),
       }
     } else {
-      if (this.config.verboseConsoleLog) {
-        this.logger.info(`正在获取仓库信息: ${repo.url}`)
-      }
       const releases = await this.gitService.getReleases(repo.url, 1)
       if (releases.length === 0) return null
       
@@ -193,10 +233,6 @@ export class PollScheduler {
   ): Promise<RepoUpdate | null> {
     const { owner, repo: repoName } = parseRepoUrl(repo.url)
     const branch = repo.branch || 'main'
-    
-    if (this.config.verboseConsoleLog) {
-      this.logger.info(`正在获取仓库信息: ${repo.url}`)
-    }
     
     // 获取上次检查点
     const lastCheckpoint = await this.storage.getLastCheckpoint(repo.url, branch)
