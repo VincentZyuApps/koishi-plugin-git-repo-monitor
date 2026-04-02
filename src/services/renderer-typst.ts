@@ -5,6 +5,7 @@ import { Config } from '../config'
 import path from 'node:path'
 import fs from 'node:fs'
 import type { NodeCompiler, NodeAddFontBlobs } from '@myriaddreamin/typst-ts-node-compiler'
+// 导入类型声明
 import {} from 'koishi-plugin-to-image-service'
 import {} from 'koishi-plugin-w-node'
 
@@ -102,6 +103,7 @@ export class TypstRenderer {
   private typst: typeof import('@myriaddreamin/typst-ts-node-compiler') | null = null
   private compiler: NodeCompiler | null = null
   private readonly typstModuleName = '@myriaddreamin/typst-ts-node-compiler'
+  private initialized = false
 
   constructor(
     private ctx: Context,
@@ -127,15 +129,47 @@ export class TypstRenderer {
   }
 
   /**
-   * 生成 Typst 中嵌入 SVG 图标的代码
-   * 使用 bytes() 函数直接传入字节数组
+   * 生成 Typst 中平台图标的代码
+   * 根据配置选择使用 SVG Logo 或 Emoji Logo
    */
   private generateIconTypst(provider: string, size: string = '14pt'): string {
-    const svg = this.getPlatformIcon(provider)
-    // 将 SVG 转换为字节数组格式
-    const bytes = Buffer.from(svg, 'utf-8')
-    const bytesArray = Array.from(bytes).join(', ')
-    return `#box(baseline: 2pt)[#image.decode(bytes((${bytesArray})), width: ${size}, height: ${size})]`
+    // 调试日志：显示当前配置
+    if (this.config.typstLogoType === undefined) {
+      this.ctx.logger('git-monitor').warn(`typstLogoType 配置未定义，使用默认值: emoji`)
+    } else {
+      this.ctx.logger('git-monitor').debug(`typstLogoType 配置: ${this.config.typstLogoType}`)
+    }
+    
+    // 根据配置选择 Logo 类型
+    if (this.config.typstLogoType === 'svg') {
+      // 使用 SVG Logo
+      this.ctx.logger('git-monitor').debug(`使用 SVG Logo 渲染 ${provider}`)
+      const svg = this.getPlatformIcon(provider)
+      // 将 SVG 转换为字节数组格式
+      const bytes = Buffer.from(svg, 'utf-8')
+      const bytesArray = Array.from(bytes).join(', ')
+      return `#box(baseline: 2pt)[#image.decode(bytes((${bytesArray})), width: ${size}, height: ${size})]`
+    } else {
+      // 使用 Emoji Logo（默认）
+      this.ctx.logger('git-monitor').debug(`使用 Emoji Logo 渲染 ${provider}`)
+      const iconMap: Record<string, string> = {
+        github: '🐙',
+        gitee: '🏮',
+        gitlab: '🦊',
+        gitcode: '💻'
+      }
+      const icon = iconMap[provider] || '📦'
+      // 确保 size 参数是有效的 Typst 尺寸格式
+      const validSize = size.endsWith('pt') ? size : '14pt'
+      return `#box(baseline: 2pt)[#text(size: ${validSize})[${icon}]]`
+    }
+  }
+
+  /**
+   * 检查渲染器是否已初始化
+   */
+  isReady(): boolean {
+    return this.initialized && !!this.typst
   }
 
   /**
@@ -149,6 +183,7 @@ export class TypstRenderer {
       throw new Error('to-image-service 服务未启用，无法使用 Typst 渲染')
     }
     this.typst = await this.ctx.node.safeImport(this.typstModuleName)
+    this.initialized = true
     this.ctx.logger('git-monitor').info('Typst 模块加载成功')
   }
 
@@ -189,12 +224,46 @@ export class TypstRenderer {
   }
 
   /**
+   * 修复 Typst 生成的 SVG 以兼容 resvg
+   * 
+   * Typst 的 SVG 输出使用 CSS 变量和 <use> 元素，resvg 不支持 CSS 变量。
+   * 解决方案：移除 CSS 变量样式规则，让颜色通过父元素的 fill 属性继承。
+   */
+  private fixSvgForResvg(svg: string): string {
+    // 移除 .outline_glyph 的 fill: var(--glyph_fill) 样式规则
+    // 这样颜色会从父元素 <g class="typst-text" fill="#color"> 继承
+    let fixed = svg.replace(
+      /\.outline_glyph\s+path,\s*\npath\.outline_glyph\s*{\s*\n\s*fill:\s*var\(--glyph_fill\);\s*\n\s*stroke:\s*var\(--glyph_stroke\);\s*\n}/g,
+      ''
+    )
+    // 备用匹配：更宽松的模式
+    fixed = fixed.replace(
+      /\.outline_glyph[^}]*fill:\s*var\(--glyph_fill\)[^}]*}/g,
+      ''
+    )
+    // 移除 transition 样式（resvg 不支持）
+    fixed = fixed.replace(
+      /\.outline_glyph[^}]*transition[^}]*}/g,
+      ''
+    )
+    // 移除 hover 样式（静态图片不需要）
+    fixed = fixed.replace(
+      /\.hover\s+\.typst-text\s*{[^}]*}/g,
+      ''
+    )
+    return fixed
+  }
+
+  /**
    * 将 Typst 代码编译为 SVG
    */
   private toSvg(content: string): string {
     const compiler = this.getCompiler()
     try {
-      return compiler.svg({ mainFileContent: content })
+      let result = compiler.svg({ mainFileContent: content })
+      // 修复 SVG 以兼容 resvg
+      result = this.fixSvgForResvg(result)
+      return result
     } finally {
       compiler.evictCache(10)
     }
@@ -207,13 +276,17 @@ export class TypstRenderer {
   private async toPng(content: string): Promise<Buffer> {
     const svg = this.toSvg(content)
     
-    if (!this.ctx.toImageService?.sharpRenderer) {
-      throw new Error('toImageService.sharpRenderer 尚未就绪')
+    // 使用类型断言绕过 TypeScript 检查
+    const toImageService = this.ctx.toImageService as any
+    if (!toImageService?.resvgRenderer) {
+      throw new Error('toImageService.resvgRenderer 尚未就绪')
     }
     
-    const result = await this.ctx.toImageService.sharpRenderer.render({
-      source: Buffer.from(svg),
-      format: 'png',
+    const result = await toImageService.resvgRenderer.render({
+      svg: svg,
+      options: {
+        fitTo: { mode: 'zoom', value: this.config.typstRenderScale || 1.3 },
+      },
     })
     return Buffer.from(result)
   }
@@ -465,12 +538,24 @@ ${repoSections}
   }
 
   /**
+   * 确保渲染器已初始化
+   */
+  private async ensureTypstReady(): Promise<void> {
+    if (!this.isReady()) {
+      await this.init()
+    }
+  }
+
+  /**
    * 渲染多个更新到一张图片
    */
   async renderBatchUpdates(updates: RepoUpdate[], groupName: string): Promise<Buffer | null> {
     if (updates.length === 0) {
       return null
     }
+
+    // 确保渲染器已初始化
+    await this.ensureTypstReady()
 
     const typstCode = this.generateBatchTypst(updates, groupName)
     

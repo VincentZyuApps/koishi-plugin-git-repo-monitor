@@ -10,7 +10,7 @@ import { StorageManager } from './utils/storage'
 
 // 导入类型声明
 import {} from 'koishi-plugin-to-image-service'
-import {} from 'koishi-plugin-typst-to-image-service'
+// import {} from 'koishi-plugin-typst-to-image-service'  // 暂时注释掉，模块不存在
 import {} from 'koishi-plugin-w-node'
 import {} from 'koishi-plugin-puppeteer'
 
