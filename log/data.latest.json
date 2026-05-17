@@ -1,0 +1,76 @@
+{
+  "timestamp": "2026-05-17T15:00:00.121Z",
+  "groupName": "qwq",
+  "updateCount": 3,
+  "updates": [
+    {
+      "repoName": "deno",
+      "repoOwner": "denoland",
+      "repoUrl": "https://github.com/denoland/deno",
+      "branch": "main",
+      "type": "commits",
+      "commitCount": 1,
+      "latestCommit": {
+        "sha": "19e63a0eee6c9e58016de155a956165786fbff50",
+        "shortSha": "19e63a0",
+        "message": "chore: ignore es-module/test-cjs-legacyMainResolve tests (#34186)\n\n\n\nCo-authored-by: divybot <divybot@users.noreply.github.com>\nCo-authored-by: Divy Srivastava <me@littledivy.com>",
+        "author": "em",
+        "authorEmail": "em@littledivy.com",
+        "date": "2026-05-17T14:47:52.000Z",
+        "url": "https://github.com/denoland/deno/commit/19e63a0eee6c9e58016de155a956165786fbff50",
+        "stats": {
+          "files": 1,
+          "additions": 8,
+          "deletions": 0
+        }
+      },
+      "updateTime": "2026-05-17T14:50:05.616Z"
+    },
+    {
+      "repoName": "php-src",
+      "repoOwner": "php",
+      "repoUrl": "https://github.com/php/php-src",
+      "branch": "master",
+      "type": "commits",
+      "commitCount": 1,
+      "latestCommit": {
+        "sha": "78277542074b833c997164175481e6c4a153fc96",
+        "shortSha": "7827754",
+        "message": "ext/intl: Fix merge conflict markers in spoofchecker_arginfo.h (#22072)",
+        "author": "Jorg Adam Sowa",
+        "authorEmail": "jorg.sowa@gmail.com",
+        "date": "2026-05-17T13:56:57.000Z",
+        "url": "https://github.com/php/php-src/commit/78277542074b833c997164175481e6c4a153fc96",
+        "stats": {
+          "files": 1,
+          "additions": 0,
+          "deletions": 12
+        }
+      },
+      "updateTime": "2026-05-17T14:00:04.753Z"
+    },
+    {
+      "repoName": "runtime",
+      "repoOwner": "dotnet",
+      "repoUrl": "https://github.com/dotnet/runtime",
+      "branch": "main",
+      "type": "commits",
+      "commitCount": 1,
+      "latestCommit": {
+        "sha": "db4b5d322efd2cab2287e15200a0b16332b41407",
+        "shortSha": "db4b5d3",
+        "message": "[Wasm/Ryujit] Fix if stack depth; fix pep call ordering (#128242)\n\nAccount for additional control flow stack depth added during codegen\nwhen using `if/end`.\n\nFix argument eval ordering for PEP calls so the PEP is pushed as the\nlast arg, and then pushed and indirected to get the function index.",
+        "author": "Andy Ayers",
+        "authorEmail": "andya@microsoft.com",
+        "date": "2026-05-17T14:49:51.000Z",
+        "url": "https://github.com/dotnet/runtime/commit/db4b5d322efd2cab2287e15200a0b16332b41407",
+        "stats": {
+          "files": 3,
+          "additions": 62,
+          "deletions": 14
+        }
+      },
+      "updateTime": "2026-05-17T14:50:05.484Z"
+    }
+  ]
+}

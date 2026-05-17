@@ -624,8 +624,41 @@ export async function renderPuppeteerImage(ctx: Context, config: Config, updates
       clip,
     })
 
-    return Buffer.from(buffer as unknown as ArrayBuffer)
+    const resultBuffer = Buffer.from(buffer as unknown as ArrayBuffer)
+
+    // 文件日志输出
+    if (config.verboseFileLog) {
+      await savePuppeteerImageToFile(resultBuffer, groupName, ctx)
+    }
+
+    return resultBuffer
   } finally {
     await page.close().catch(() => undefined)
+  }
+}
+
+/**
+ * 保存 Puppeteer 图片到文件（用于调试）
+ */
+async function savePuppeteerImageToFile(buffer: Buffer, groupName: string, ctx: Context): Promise<void> {
+  try {
+    const fs = await import('fs/promises')
+    const path = await import('path')
+    
+    // 创建日志目录
+    const logDir = path.join(__dirname, '..', '..', 'log')
+    try {
+      await fs.mkdir(logDir, { recursive: true })
+    } catch (error) {
+      // 目录可能已存在，忽略错误
+    }
+    
+    // 保存文件
+    const filePath = path.join(logDir, 'puppeteer.latest.png')
+    await fs.writeFile(filePath, buffer)
+    
+    ctx.logger('git-monitor').info(`已保存 ${groupName} 的 Puppeteer 图片到: ${filePath}`)
+  } catch (error) {
+    ctx.logger('git-monitor').warn(`保存 Puppeteer 图片文件失败: ${(error as Error).message}`)
   }
 }

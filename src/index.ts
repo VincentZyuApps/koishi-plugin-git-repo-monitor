@@ -166,6 +166,8 @@ declare module 'koishi' {
 
 export function apply(ctx: Context, config: Config) {
   const logger = ctx.logger('git-monitor')
+  const pollLogger = ctx.logger('git-monitor:轮询触发:poll')
+  const pushLogger = ctx.logger('git-monitor:指令触发:push')
 
   // ============ 监控组名称去重检查 ============
   {
@@ -331,12 +333,16 @@ export function apply(ctx: Context, config: Config) {
       
       const verboseLog = config.verboseSessionLog
       const quoteContext = buildQuoteContext(session)
+      const sessionChannel = session ? {
+        platform: session.platform,
+        channelId: String(session.channelId)
+      } : undefined
       const mode = (options?.mode as 'new' | 'last') || config.defaultPushMode
       try {
         if (verboseLog && session) {
           await session.send(formatCommandReply(session, `📤 开始推送 ${group} (模式: ${mode})...`))
         }
-        await pushScheduler.triggerPush(group, mode, { quoteContext })
+        await pushScheduler.triggerPush(group, mode, { quoteContext, sessionChannel })
         return formatCommandReply(session, verboseLog ? '✅ 推送完成' : '✅ 完成')
       } catch (error) {
         logger.error(`手动推送失败:`, error)

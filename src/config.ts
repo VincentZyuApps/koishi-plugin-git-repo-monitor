@@ -182,6 +182,8 @@ export interface Config {
   activeOutputModes: OutputMode[]
   /** 指令触发的回复是否引用原消息 */
   quoteCommandReplies: boolean
+  /** push 指令的推送目标选择 */
+  pushCommandTarget: 'configured' | 'current' | 'both'
   /** 默认推送模式 */
   defaultPushMode: 'last' | 'new'
 
@@ -242,8 +244,10 @@ export interface Config {
   // ========== 🛠️ 调试选项 ==========
   /** 启用调试日志 */
   verboseConsoleLog: boolean
-  /** 是否输出会话 verbose 日志 */
+  /** 会话内输出详细提示 */
   verboseSessionLog: boolean
+  /** 文件日志输出 */
+  verboseFileLog: boolean
 }
 
 /**
@@ -316,7 +320,15 @@ export const Config: Schema<Config> = Schema.intersect([
       .description('📤 指令触发时的输出形式（可多选）'),
     quoteCommandReplies: Schema.boolean()
       .default(true)
-      .description('💬 是否引用触发消息发送回复（forward 输出不支持引用）'),
+      .description('💬 是否引用触发消息发送回复（onebot forward 合并转发 输出不支持引用）'),
+    pushCommandTarget: Schema.union([
+      Schema.const('configured').description('🎯 configured： 仅推送到配置项 `monitorGroups[i].pushTargets` 中的推送目标'),
+      Schema.const('current').description('📍 current： 仅推送到当前触发指令的频道 `session.channelId` 中'),
+      Schema.const('both').description('🔄 both： 同时推送到配置目标和当前频道，上方二者兼有'),
+    ])
+      .role('radio')
+      .default('both')
+      .description('🎯 git-monitor.push 指令的推送目标选择'),
     defaultPushMode: Schema.union([
       Schema.const('last').description('🔄 last：强制推送所有仓库的最新状态（无论是否有新更新）'),
       Schema.const('new') .description('✨ new：仅推送自上次检查以来的新增更新'),
@@ -482,7 +494,10 @@ export const Config: Schema<Config> = Schema.intersect([
       .description('🐛 启用调试日志'),
     verboseSessionLog: Schema.boolean()
       .default(true)
-      .description('🗒️ 会话内输出详细提示（如 “开始推送”“推送完成”）'),
+      .description('🗒️ 会话内输出详细提示（如 "开始推送""推送完成"）'),
+    verboseFileLog: Schema.boolean()
+      .default(false)
+      .description('📝 开启后将最后一次渲染的图片输出到 /log/ 目录（方便调试）'),
   }).description('🛠️ 调试选项'),
 ])
 

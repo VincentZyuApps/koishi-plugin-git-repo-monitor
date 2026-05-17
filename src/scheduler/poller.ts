@@ -1,8 +1,10 @@
 import { Context, Logger } from 'koishi'
 import * as cron from 'node-cron'
+import * as path from 'path'
 import { MonitorGroup, RepoUpdate } from '../types'
 import { GitService, parseRepoUrl } from '../services/git'
 import { StorageManager } from '../utils/storage'
+import { writeRepoUpdatesToJson } from '../utils/file-logger'
 import { Config } from '../config'
 
 /**
@@ -86,18 +88,19 @@ export class PollScheduler {
   /**
    * 获取监控组所有仓库的最新状态（不更新检查点）
    */
-  async fetchLatestUpdates(group: MonitorGroup): Promise<RepoUpdate[]> {
+  async fetchLatestUpdates(group: MonitorGroup, customLogger?: Logger): Promise<RepoUpdate[]> {
+    const logger = customLogger || this.logger
     const totalRepos = group.repos.length
     const parallelCount = Math.max(1, this.config.parallelFetchCount || 1)
 
     const processRepo = async (repo: MonitorGroup['repos'][0], index: number): Promise<RepoUpdate | null> => {
       const progress = Math.round(((index + 1) / totalRepos) * 100)
-      this.logger.info(`正在获取仓库信息: ${repo.url} (${index + 1}/${totalRepos}, ${progress}%)`)
+      logger.info(`【指令触发】正在获取仓库信息: ${repo.url} (${index + 1}/${totalRepos}, ${progress}%)`)
       try {
         const update = await this.getRepoLatestUpdate(repo)
         return update
       } catch (error) {
-        this.logger.error(`获取仓库最新状态失败 ${repo.url}:`, error)
+        logger.error(`获取仓库最新状态失败 ${repo.url}:`, error)
         return null
       }
     }
@@ -119,6 +122,12 @@ export class PollScheduler {
       }
     }
 
+    // 输出仓库信息到 JSON 文件（如果启用了 verboseFileLog）
+    if (this.config.verboseFileLog) {
+      const logDir = path.join(__dirname, '../../log')
+      writeRepoUpdatesToJson(results, group, logger, logDir)
+    }
+    
     return results
   }
 
@@ -154,7 +163,7 @@ export class PollScheduler {
     
     const processRepo = async (repo: MonitorGroup['repos'][0], index: number): Promise<RepoUpdate | null> => {
       const progress = Math.round(((index + 1) / totalRepos) * 100)
-      this.logger.info(`正在获取仓库信息: ${repo.url} (${index + 1}/${totalRepos}, ${progress}%)`)
+      this.logger.info(`获取仓库: ${repo.url} (${index + 1}/${totalRepos}, ${progress}%)`)
       try {
         const update = await this.checkRepoUpdate(repo)
         if (update) {
@@ -203,10 +212,10 @@ export class PollScheduler {
       if (commits.length === 0) return null
       
       return {
-        type: 'commits',
+        repo: repo,
         repoName,
         repoOwner: owner,
-        repo: repo,
+        type: 'commits',
         commits: [commits[0]],
         updateTime: new Date(),
       }
@@ -215,10 +224,10 @@ export class PollScheduler {
       if (releases.length === 0) return null
       
       return {
-        type: 'releases',
+        repo: repo,
         repoName,
         repoOwner: owner,
-        repo: repo,
+        type: 'releases',
         releases: [releases[0]],
         updateTime: new Date(),
       }

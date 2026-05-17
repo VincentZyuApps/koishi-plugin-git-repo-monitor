@@ -1,10 +1,12 @@
 import { Context, Logger, h } from 'koishi'
 import * as cron from 'node-cron'
+import * as path from 'path'
 import { Config, OutputMode } from '../config'
 import { MonitorGroup, RepoUpdate, GitCommit, GitRelease, RepoConfig } from '../types'
 import { PollScheduler } from './poller'
 import { TypstRenderer } from '../services/renderer-typst'
 import { StorageManager } from '../utils/storage'
+import { writeRepoUpdatesToJson } from '../utils/file-logger'
 import { renderTextSummary } from '../services/render-text'
 import { renderPuppeteerImage } from '../services/render-puppeteer'
 import { buildForwardNodes } from '../services/render-forward'
@@ -49,6 +51,7 @@ interface QuoteContext {
 interface PushOptions {
   dryRun?: boolean
   quoteContext?: QuoteContext
+  sessionChannel?: { platform: string; channelId: string }
 }
 
 /**
@@ -136,8 +139,52 @@ export class PushScheduler {
       this.logger.info(`Dry-run: 使用 ${updates.length} 条假数据推送 ${group.name}`)
     }
     
+    // 输出仓库信息到 JSON 文件（如果启用了 verboseFileLog）
+    if (this.config.verboseFileLog) {
+      const logDir = path.join(__dirname, '../../log')
+      writeRepoUpdatesToJson(updates, group, this.logger, logDir)
+    }
+    
     // 获取启用的推送目标
-    const enabledTargets = group.pushTargets.filter(target => target.enabled !== false)
+    let enabledTargets = group.pushTargets.filter(target => target.enabled !== false)
+    
+    // 根据配置决定推送目标（仅对主动触发生效）
+    if (trigger === 'active' && options.sessionChannel) {
+      const pushTargetMode = this.config.pushCommandTarget || 'both'
+      
+      if (pushTargetMode === 'current') {
+        // 仅推送到当前触发指令的频道
+        const currentChannel = options.sessionChannel
+        enabledTargets = [{
+          name: '当前频道',
+          platform: currentChannel.platform,
+          channelId: currentChannel.channelId,
+          enabled: true
+        }]
+        this.logger.info(`推送目标模式: current，仅推送到当前频道 ${currentChannel.platform}:${currentChannel.channelId}`)
+      } else if (pushTargetMode === 'both') {
+        // 同时推送到配置目标和当前频道
+        const currentChannel = options.sessionChannel
+        const hasCurrentChannel = enabledTargets.some(
+          target => target.platform === currentChannel.platform && target.channelId === currentChannel.channelId
+        )
+        
+        if (!hasCurrentChannel) {
+          enabledTargets.push({
+            name: '当前频道',
+            platform: currentChannel.platform,
+            channelId: currentChannel.channelId,
+            enabled: true
+          })
+          this.logger.info(`推送目标模式: both，推送到配置目标和当前频道 ${currentChannel.platform}:${currentChannel.channelId}`)
+        } else {
+          this.logger.info(`推送目标模式: both，当前频道已在配置目标中`)
+        }
+      } else {
+        // configured：仅推送到配置的推送目标
+        this.logger.info(`推送目标模式: configured，仅推送到配置目标`)
+      }
+    }
     
     if (enabledTargets.length === 0) {
       this.logger.warn(`监控组 ${group.name} 没有启用的推送目标`)
@@ -148,40 +195,53 @@ export class PushScheduler {
     
     try {
       const modes = this.resolveOutputModes(trigger)
+      this.logger.info(`解析输出模式: ${JSON.stringify({ trigger, selected: trigger === 'active' ? this.config.activeOutputModes : this.config.passiveOutputModes, resolved: modes })}`)
 
-      // 构建消息
-      const messages: h[] = []
+      // 构建消息组（图片分开发送）
+      const messageGroups: h[][] = []
 
+      this.logger.info(`开始构建消息，更新数: ${updates.length}, 输出模式: ${modes.join(', ')}`)
+
+      // 文字消息（如果有）
       if (modes.includes('text')) {
         const summary = renderTextSummary(updates, group.name, this.config)
-        messages.push(h.text(summary))
+        messageGroups.push([h.text(summary)])
+        this.logger.info(`添加文字消息，长度: ${summary.length}`)
       }
 
+      // Typst 图片（单独一条消息）
       if (modes.includes('typst-image')) {
         try {
+          this.logger.info(`开始渲染 Typst 图片，更新数: ${updates.length}`)
           const image = await this.renderer.renderBatchUpdates(updates, group.name)
           if (image) {
-            messages.push(h.image(image, 'image/png'))
+            messageGroups.push([h.image(image, 'image/png')])
+            this.logger.info(`Typst 图片渲染成功，大小: ${image.length} bytes`)
           } else {
-            this.logger.warn(`Typst 图片渲染失败: ${group.name}`)
+            this.logger.warn(`Typst 图片渲染返回 null，跳过此输出`)
           }
         } catch (error) {
           this.logger.error(`Typst 渲染异常: ${(error as Error).message}`)
         }
       }
 
+      // Puppeteer 图片（单独一条消息）
       if (modes.includes('puppeteer-image')) {
         try {
+          this.logger.info(`开始渲染 Puppeteer 图片，更新数: ${updates.length}`)
           const image = await renderPuppeteerImage(this.ctx, this.config, updates, group.name)
           if (image) {
-            messages.push(h.image(image, 'image/png'))
+            messageGroups.push([h.image(image, 'image/png')])
+            this.logger.info(`Puppeteer 图片渲染成功，大小: ${image.length} bytes`)
           } else {
-            this.logger.warn(`Puppeteer 图片渲染失败: ${group.name}`)
+            this.logger.warn(`Puppeteer 图片渲染返回 null，跳过此输出`)
           }
         } catch (error) {
           this.logger.error(`Puppeteer 渲染异常: ${(error as Error).message}`)
         }
       }
+
+      this.logger.info(`消息组构建完成，数量: ${messageGroups.length}`)
 
       // 推送到所有启用的目标
       for (const target of enabledTargets) {
@@ -196,15 +256,22 @@ export class PushScheduler {
           
           // 发送合并转发（仅支持 OneBot）
           if (modes.includes('forward')) {
-            await this.sendForwardMessage(target.platform, target.channelId, updates, group.name)
+            try {
+              await this.sendForwardMessage(target.platform, target.channelId, updates, group.name)
+            } catch (error) {
+              this.logger.error(`合并转发异常: ${(error as Error).message}`)
+            }
           }
 
-          // 发送普通消息
-          if (messages.length > 0) {
-            const outboundMessages = shouldQuoteTarget && quoteContext
-              ? [h.quote(quoteContext.messageId), ...messages]
-              : messages
-            await this.sendMessage(target.platform, target.channelId, outboundMessages)
+          // 发送普通消息（图片分开发送）
+          if (messageGroups.length > 0) {
+            for (const messages of messageGroups) {
+              // 如果是主动触发且开启了引用，每条消息都引用原消息
+              const outboundMessages = shouldQuoteTarget && quoteContext
+                ? [h.quote(quoteContext.messageId), ...messages]
+                : messages
+              await this.sendMessage(target.platform, target.channelId, outboundMessages)
+            }
           } else if (!modes.includes('forward')) {
             this.logger.warn(`无可发送的消息内容: ${group.name}`)
           }
@@ -339,7 +406,9 @@ export class PushScheduler {
     }
     
     if (mode === 'last') {
-      const updates = await this.pollScheduler.fetchLatestUpdates(job.group)
+      this.logger.info(`last 模式: 获取 ${job.group.name} 的所有仓库最新状态`)
+      const updates = await this.pollScheduler.fetchLatestUpdates(job.group, this.ctx.logger('git-monitor:指令触发:push'))
+      this.logger.info(`last 模式: 获取到 ${updates.length} 个更新`)
       await this.pushUpdates(job.group, 'active', updates, options)
     } else {
       await this.pushUpdates(job.group, 'active', undefined, options)

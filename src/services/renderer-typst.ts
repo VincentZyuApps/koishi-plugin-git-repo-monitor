@@ -140,29 +140,18 @@ export class TypstRenderer {
       this.ctx.logger('git-monitor').debug(`typstLogoType 配置: ${this.config.typstLogoType}`)
     }
     
-    // 根据配置选择 Logo 类型
-    if (this.config.typstLogoType === 'svg') {
-      // 使用 SVG Logo
-      this.ctx.logger('git-monitor').debug(`使用 SVG Logo 渲染 ${provider}`)
-      const svg = this.getPlatformIcon(provider)
-      // 将 SVG 转换为字节数组格式
-      const bytes = Buffer.from(svg, 'utf-8')
-      const bytesArray = Array.from(bytes).join(', ')
-      return `#box(baseline: 2pt)[#image.decode(bytes((${bytesArray})), width: ${size}, height: ${size})]`
-    } else {
-      // 使用 Emoji Logo（默认）
-      this.ctx.logger('git-monitor').debug(`使用 Emoji Logo 渲染 ${provider}`)
-      const iconMap: Record<string, string> = {
-        github: '🐙',
-        gitee: '🏮',
-        gitlab: '🦊',
-        gitcode: '💻'
-      }
-      const icon = iconMap[provider] || '📦'
-      // 确保 size 参数是有效的 Typst 尺寸格式
-      const validSize = size.endsWith('pt') ? size : '14pt'
-      return `#box(baseline: 2pt)[#text(size: ${validSize})[${icon}]]`
+    // 暂时强制使用 Emoji Logo，避免 SVG 导致的 Typst 语法错误
+    this.ctx.logger('git-monitor').debug(`使用 Emoji Logo 渲染 ${provider}`)
+    const iconMap: Record<string, string> = {
+      github: '🐙',
+      gitee: '🏮',
+      gitlab: '🦊',
+      gitcode: '💻'
     }
+    const icon = iconMap[provider] || '📦'
+    // 确保 size 参数是有效的 Typst 尺寸格式
+    const validSize = size.endsWith('pt') ? size : '14pt'
+    return `#box(baseline: 2pt)[#text(size: ${validSize})[${icon}]]`
   }
 
   /**
@@ -293,20 +282,17 @@ export class TypstRenderer {
 
   /**
    * 转义 Typst 内容中的特殊字符
+   * 在方括号语法 #text[...] 中，只有 \ [ ] # $ ` 是特殊字符需要转义
+   * * _ < > @ 在方括号内容中不是特殊字符，不需要转义
    */
   private escapeTypstContent(str: string): string {
     return str
-      .replace(/\\/g, '\\\\')
+      .replace(/\\/g, '\\\\')    // 转义反斜杠（必须在其他转义之前）
       .replace(/\[/g, '\\[')
       .replace(/\]/g, '\\]')
       .replace(/#/g, '\\#')
       .replace(/\$/g, '\\$')
       .replace(/`/g, '\\`')
-      .replace(/\*/g, '\\*')
-      .replace(/_/g, '\\_')
-      .replace(/</g, '\\<')      // 转义左尖括号（标签语法）
-      .replace(/>/g, '\\>')      // 转义右尖括号（标签语法）
-      .replace(/@/g, '\\@')      // 转义 @ 符号（引用语法）
       .replace(/\n/g, ' ')
       .replace(/\r/g, '')
       .replace(/\t/g, ' ')
@@ -561,13 +547,79 @@ ${repoSections}
     
     this.ctx.logger('git-monitor').debug('生成的 Typst 代码:\n' + typstCode.substring(0, 1000) + '\n...')
     
+    // 文件日志输出：保存 Typst 代码文件
+    if (this.config.verboseFileLog) {
+      await this.saveTypstCodeToFile(typstCode, groupName)
+    }
+    
     try {
       const buffer = await this.toPng(typstCode)
+      
+      // 文件日志输出：保存图片文件
+      if (this.config.verboseFileLog) {
+        await this.saveImageToFile(buffer, 'typst.latest.png', groupName)
+      }
+      
       return Buffer.from(buffer)
     } catch (error) {
       this.ctx.logger('git-monitor').error('批量渲染失败:', error)
       this.ctx.logger('git-monitor').error('Typst 代码片段:\n' + typstCode.substring(0, 500))
       return null
+    }
+  }
+
+  /**
+   * 保存图片到文件（用于调试）
+   */
+  private async saveImageToFile(buffer: Buffer, filename: string, groupName: string): Promise<void> {
+    try {
+      // 导入 fs 模块
+      const fs = await import('fs/promises')
+      const path = await import('path')
+      
+      // 创建日志目录
+      const logDir = path.join(__dirname, '..', '..', 'log')
+      try {
+        await fs.mkdir(logDir, { recursive: true })
+      } catch (error) {
+        // 目录可能已存在，忽略错误
+      }
+      
+      // 保存文件
+      const filePath = path.join(logDir, filename)
+      await fs.writeFile(filePath, buffer)
+      
+      this.ctx.logger('git-monitor').info(`已保存 ${groupName} 的图片到: ${filePath}`)
+    } catch (error) {
+      this.ctx.logger('git-monitor').warn(`保存图片文件失败: ${(error as Error).message}`)
+    }
+  }
+
+  /**
+   * 保存 Typst 代码到文件（用于调试）
+   */
+  private async saveTypstCodeToFile(typstCode: string, groupName: string): Promise<void> {
+    try {
+      // 导入 fs 模块
+      const fs = await import('fs/promises')
+      const path = await import('path')
+      
+      // 创建日志目录
+      const logDir = path.join(__dirname, '..', '..', 'log')
+      try {
+        await fs.mkdir(logDir, { recursive: true })
+      } catch (error) {
+        // 目录可能已存在，忽略错误
+      }
+      
+      // 保存 Typst 代码文件
+      const filePath = path.join(logDir, 'typst.latest.typ')
+      await fs.writeFile(filePath, typstCode, 'utf-8')
+      
+      this.ctx.logger('git-monitor').info(`已保存 ${groupName} 的 Typst 代码到: ${filePath}`)
+      this.ctx.logger('git-monitor').debug(`Typst 代码长度: ${typstCode.length} 字符`)
+    } catch (error) {
+      this.ctx.logger('git-monitor').warn(`保存 Typst 代码文件失败: ${(error as Error).message}`)
     }
   }
 
