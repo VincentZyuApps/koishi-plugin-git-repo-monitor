@@ -96,7 +96,7 @@ export class PollScheduler {
     const processRepo = async (repo: MonitorGroup['repos'][0], index: number): Promise<RepoUpdate | null> => {
       const progress = ((index + 1) / totalRepos) * 100
       const startTime = Date.now()
-      logger.info(`【指令触发】[${progress.toFixed(2)}%] 正在获取仓库信息: ${repo.url} (${index + 1}/${totalRepos})`)
+      logger.info(`【指令触发】[${index + 1}/${totalRepos}] [${progress.toFixed(2)}%] 正在获取: ${repo.url}`)
       try {
         const timeoutMs = this.config.repoFetchTimeout || 300000
         const update = await Promise.race([
@@ -106,15 +106,16 @@ export class PollScheduler {
           ),
         ])
         const elapsed = Date.now() - startTime
+        const prefix = `[${index + 1}/${totalRepos}] [${progress.toFixed(2)}%] [${elapsed}ms]`
         if (update) {
-          logger.info(`✅ [${progress.toFixed(2)}%] 获取完成: ${repo.url} (${elapsed}ms)`)
+          logger.info(`✅ ${prefix} 获取完成: ${repo.url}`)
         } else {
-          logger.warn(`⚠️ [${progress.toFixed(2)}%] 无返回数据: ${repo.url} (${elapsed}ms)`)
+          logger.warn(`⚠️ ${prefix} 无返回: ${repo.url}`)
         }
         return update
       } catch (error) {
         const elapsed = Date.now() - startTime
-        logger.error(`获取仓库最新状态失败 ${repo.url} (${elapsed}ms):`, error)
+        logger.error(`❌ [${index + 1}/${totalRepos}] [${progress.toFixed(2)}%] [${elapsed}ms] 获取失败: ${repo.url}`, error)
         return null
       }
     }
@@ -178,7 +179,7 @@ export class PollScheduler {
     const processRepo = async (repo: MonitorGroup['repos'][0], index: number): Promise<RepoUpdate | null> => {
       const progress = ((index + 1) / totalRepos) * 100
       const startTime = Date.now()
-      this.logger.info(`获取仓库: ${repo.url} (${index + 1}/${totalRepos}, ${progress.toFixed(2)}%)`)
+      this.logger.info(`[${index + 1}/${totalRepos}] [${progress.toFixed(2)}%] 获取: ${repo.url}`)
       try {
         const timeoutMs = this.config.repoFetchTimeout || 300000
         const update = await Promise.race([
@@ -189,14 +190,14 @@ export class PollScheduler {
         ])
         const elapsed = Date.now() - startTime
         if (update) {
-          this.logger.info(`✅ 发现新更新: ${update.repoName} (${update.type}) (${elapsed}ms)`)
+          this.logger.info(`✅ [${elapsed}ms] 发现新更新: ${update.repoName} (${update.type})`)
         } else {
-          this.logger.info(`⏭️ 无新更新: ${repo.url} (${elapsed}ms)`)
+          this.logger.info(`⏭️ [${elapsed}ms] 无新更新: ${repo.url}`)
         }
         return update
       } catch (error) {
         const elapsed = Date.now() - startTime
-        this.logger.error(`检查仓库失败 ${repo.url} (${elapsed}ms):`, error)
+        this.logger.error(`❌ [${elapsed}ms] 检查失败: ${repo.url}`, error)
         return null
       }
     }

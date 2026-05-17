@@ -1,8 +1,10 @@
 import { Schema } from 'koishi'
 
 const exampleRepoList: Array<{ url: string; branch: string; type: 'commits' | 'releases' }> = [
-  // 操作系统内核
+  // 操作系统内核 & 发行版 & 包管理
   { url: 'https://github.com/torvalds/linux', branch: 'master', type: 'commits' },
+  { url: 'https://github.com/archlinux/linux', branch: 'master', type: 'commits' },
+  { url: 'https://github.com/debian/dpkg', branch: 'main', type: 'commits' },
   // 编程语言 & 运行时
   { url: 'https://github.com/python/cpython', branch: 'main', type: 'commits' },
   { url: 'https://github.com/nodejs/node', branch: 'main', type: 'commits' },
@@ -16,9 +18,16 @@ const exampleRepoList: Array<{ url: string; branch: string; type: 'commits' | 'r
   { url: 'https://github.com/apple/swift', branch: 'main', type: 'commits' },
   { url: 'https://github.com/ruby/ruby', branch: 'master', type: 'commits' },
   { url: 'https://github.com/php/php-src', branch: 'master', type: 'commits' },
+  { url: 'https://github.com/erlang/otp', branch: 'master', type: 'commits' },
+  { url: 'https://github.com/elixir-lang/elixir', branch: 'main', type: 'commits' },
+  { url: 'https://github.com/dart-lang/sdk', branch: 'main', type: 'commits' },
+  { url: 'https://github.com/ziglang/zig', branch: 'master', type: 'commits' },
+  { url: 'https://github.com/oven-sh/bun', branch: 'main', type: 'commits' },
+  { url: 'https://github.com/tc39/ecma262', branch: 'main', type: 'commits' },
   // 编译器基础设施
   { url: 'https://github.com/llvm/llvm-project', branch: 'main', type: 'commits' },
   { url: 'https://github.com/gcc-mirror/gcc', branch: 'master', type: 'commits' },
+  { url: 'https://github.com/microsoft/STL', branch: 'main', type: 'commits' },
 ]
 
 const exampleRepoList2: Array<{ url: string; branch: string; type: 'commits' | 'releases' }> = [
@@ -61,9 +70,10 @@ const exampleRepoList2: Array<{ url: string; branch: string; type: 'commits' | '
   { url: 'https://github.com/ollama/ollama', branch: 'main', type: 'commits' },
   // 工具 & 面板
   { url: 'https://github.com/astral-sh/uv', branch: 'main', type: 'commits' },
+  { url: 'https://github.com/rustdesk/rustdesk', branch: 'master', type: 'commits' },
   { url: 'https://github.com/AlistGo/alist', branch: 'main', type: 'commits' },
   { url: 'https://github.com/1Panel-dev/1Panel', branch: 'dev-v2', type: 'commits' },
-  { url: 'https://github.com/rustdesk/rustdesk', branch: 'master', type: 'commits' },
+  { url: 'https://github.com/henrygd/beszel', branch: 'main', type: 'commits' },
 ]
 
 /**
