@@ -3,3 +3,6 @@ lib/
 *.log
 *.tsbuildinfo
 .DS_Store
+
+tmp/
+temp/

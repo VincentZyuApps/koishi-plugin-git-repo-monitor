@@ -186,6 +186,8 @@ export interface Config {
   pushCommandTarget: 'configured' | 'current' | 'both'
   /** 默认推送模式 */
   defaultPushMode: 'last' | 'new'
+  /** 单仓库请求超时（毫秒） */
+  repoFetchTimeout: number
 
   // ========== 🧩 Typst 渲染配置 ==========
   /** Typst 字体路径 */
@@ -271,6 +273,11 @@ export const Config: Schema<Config> = Schema.intersect([
       .max(1024)
       .default(8)
       .description('🔀 并行获取仓库数量（设为 1 则串行获取，可加快轮询速度）'),
+    repoFetchTimeout: Schema.number()
+      .min(5000)
+      .max(600000)
+      .default(300000)
+      .description('⏱️ 单仓库 API 请求超时时间（毫秒，默认 300000 = 5 分钟）'),
   }).description('⚙️ 基础配置'),
 
   Schema.object({
@@ -316,7 +323,7 @@ export const Config: Schema<Config> = Schema.intersect([
 
   Schema.object({
     activeOutputModes: createOutputModeSchema(['text', 'puppeteer-image', 'typst-image', 'forward'])
-      .default(['puppeteer-image', 'typst-image', 'forward'])
+      .default(['puppeteer-image', 'forward'])
       .description('📤 指令触发时的输出形式（可多选）'),
     quoteCommandReplies: Schema.boolean()
       .default(true)

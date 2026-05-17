@@ -94,13 +94,27 @@ export class PollScheduler {
     const parallelCount = Math.max(1, this.config.parallelFetchCount || 1)
 
     const processRepo = async (repo: MonitorGroup['repos'][0], index: number): Promise<RepoUpdate | null> => {
-      const progress = Math.round(((index + 1) / totalRepos) * 100)
-      logger.info(`【指令触发】正在获取仓库信息: ${repo.url} (${index + 1}/${totalRepos}, ${progress}%)`)
+      const progress = ((index + 1) / totalRepos) * 100
+      const startTime = Date.now()
+      logger.info(`【指令触发】[${progress.toFixed(2)}%] 正在获取仓库信息: ${repo.url} (${index + 1}/${totalRepos})`)
       try {
-        const update = await this.getRepoLatestUpdate(repo)
+        const timeoutMs = this.config.repoFetchTimeout || 300000
+        const update = await Promise.race([
+          this.getRepoLatestUpdate(repo),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`请求超时 (${timeoutMs}ms)`)), timeoutMs)
+          ),
+        ])
+        const elapsed = Date.now() - startTime
+        if (update) {
+          logger.info(`✅ [${progress.toFixed(2)}%] 获取完成: ${repo.url} (${elapsed}ms)`)
+        } else {
+          logger.warn(`⚠️ [${progress.toFixed(2)}%] 无返回数据: ${repo.url} (${elapsed}ms)`)
+        }
         return update
       } catch (error) {
-        logger.error(`获取仓库最新状态失败 ${repo.url}:`, error)
+        const elapsed = Date.now() - startTime
+        logger.error(`获取仓库最新状态失败 ${repo.url} (${elapsed}ms):`, error)
         return null
       }
     }
@@ -162,16 +176,27 @@ export class PollScheduler {
     const parallelCount = Math.max(1, this.config.parallelFetchCount || 1)
     
     const processRepo = async (repo: MonitorGroup['repos'][0], index: number): Promise<RepoUpdate | null> => {
-      const progress = Math.round(((index + 1) / totalRepos) * 100)
-      this.logger.info(`获取仓库: ${repo.url} (${index + 1}/${totalRepos}, ${progress}%)`)
+      const progress = ((index + 1) / totalRepos) * 100
+      const startTime = Date.now()
+      this.logger.info(`获取仓库: ${repo.url} (${index + 1}/${totalRepos}, ${progress.toFixed(2)}%)`)
       try {
-        const update = await this.checkRepoUpdate(repo)
+        const timeoutMs = this.config.repoFetchTimeout || 300000
+        const update = await Promise.race([
+          this.checkRepoUpdate(repo),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`请求超时 (${timeoutMs}ms)`)), timeoutMs)
+          ),
+        ])
+        const elapsed = Date.now() - startTime
         if (update) {
-          this.logger.info(`发现新更新: ${update.repoName} (${update.type})`)
+          this.logger.info(`✅ 发现新更新: ${update.repoName} (${update.type}) (${elapsed}ms)`)
+        } else {
+          this.logger.info(`⏭️ 无新更新: ${repo.url} (${elapsed}ms)`)
         }
         return update
       } catch (error) {
-        this.logger.error(`检查仓库失败 ${repo.url}:`, error)
+        const elapsed = Date.now() - startTime
+        this.logger.error(`检查仓库失败 ${repo.url} (${elapsed}ms):`, error)
         return null
       }
     }
