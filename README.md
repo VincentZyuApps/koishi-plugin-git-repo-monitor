@@ -43,6 +43,8 @@
 - 📢 **多平台推送**: 支持推送到多个平台和频道
 - 🔧 **高度可配置**: 灵活的配置项满足各种需求
 - 📦 **模块化设计**: 清晰的代码结构，易于扩展和维护
+- 🔎 **动态发现**: 从 GitHub/Gitee 用户/组织主页自动解析仓库列表，支持自动同步
+- 📊 **仓库排序**: 支持时间降序/升序、字母降序/升序四种排序方式
 
 ## 可选依赖
 
@@ -55,9 +57,13 @@
 
 ### 基础配置
 
-- **typstFontPath**: Typst 渲染字体文件绝对路径（推荐使用 LXGW WenKai Mono）
-- **puppeteerFontPath**: Puppeteer 渲染字体文件绝对路径（可选）
 - **maxCommitsPerPush**: 单次推送最大显示提交数（默认 10）
+- **showStats**: 是否显示代码行数变化统计（+/-），默认 true
+- **silentStart**: 首次运行是否静默（默认 true，防止首次添加仓库时刷屏）
+- **parallelFetchCount**: 并行获取仓库数量（默认 8，设为 1 则串行）
+- **repoSortOrder**: 仓库卡片排序方式（time-desc(默认)/time-asc/alpha-asc/alpha-desc）
+- **repoFetchTimeout**: 单仓库 API 请求超时毫秒数（默认 300000 = 5 分钟）
+- **immediatePollOnStart**: 启动时是否立即执行一次轮询（默认 false）
 
 ### 监控组配置
 
@@ -171,14 +177,14 @@ plugins:
 
 为了在轮询和 `new` 模式推送下准确获取增量更新，插件采用以下逻辑：
 
-1. **基准获取**：从 `git_repo_state` 表中读取该仓库对应分支的 `lastCheckpoint`（通常是 ISO 时间戳）。
+1. **基准获取**：从 `git_repo_state` 表中读取该仓库对应分支的 `lastCheckpoint`（最新 Commit SHA 或 ISO 时间戳）。
 2. **API 请求**：调用 GitHub/Gitee API 时，将 `lastCheckpoint` 作为 `since` 参数传递，请求该时间点之后的数据。
 3. **精准过滤**：由于 API 返回的数据可能包含 `since` 时间点本身的提交，插件会在内存中进行二次过滤：
    ```typescript
    // 过滤掉 <= 上次检查点的提交
    const newCommits = rawCommits.filter(c => c.date.getTime() > checkpointTime)
    ```
-4. **状态更新**：一旦确认有新提交并准备推送，将最新一条 Commit 的时间戳更新回数据库，作为下一次检查的基准。
+4. **状态更新**：一旦确认有新提交并准备推送，将最新一条 Commit 的 SHA 或时间戳更新回数据库，作为下一次检查的基准。
 5. **首次运行 (Silent Start)**：如果是第一次添加仓库（无数据库记录）：
    - 默认开启 `silentStart`：仅将最新 Commit 记录为 Checkpoint，**不发送推送**，防止刚添加时刷屏。
    - 关闭 `silentStart`：将最新一条 Commit 视为更新并推送。
@@ -191,6 +197,7 @@ src/
 ├── config.ts             # 配置定义
 ├── types.ts              # 类型定义
 ├── services/
+│   ├── discover.ts       # 动态发现服务
 │   ├── git.ts            # Git API 服务
 │   ├── renderer-typst.ts # Typst 渲染服务
 │   ├── render-puppeteer.ts # Puppeteer 渲染服务
@@ -200,7 +207,9 @@ src/
 │   ├── poller.ts         # 轮询调度器
 │   └── pusher.ts         # 推送调度器
 └── utils/
-    └── storage.ts        # 数据存储
+    ├── storage.ts        # 数据存储
+    ├── file-logger.ts    # 文件日志工具
+    └── format.ts         # 格式化工具
 ```
 
 ## 分支名检查机制
