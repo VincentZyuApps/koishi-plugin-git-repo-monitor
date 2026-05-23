@@ -148,6 +148,7 @@ function formatCommitMessage(msg: string): string {
 function buildHtml(updates: RepoUpdate[], groupName: string, config: Config, icons: IconMap, fontCss: string, cardHeights?: number[]) {
   const dark = config.puppeteerDarkMode
   const colCount = config.puppeteerColumnCount || 1
+  const colWidth = config.puppeteerColumnWidth || 580
   const layoutMode = config.puppeteerLayoutMode || 'masonry'
   const flowDirection: FlowDirection = config.puppeteerFlowDirection || 'row-first'
   const masonryEnabled = layoutMode === 'masonry' && colCount > 1 // 瀑布流只在多列场景下生效
@@ -343,8 +344,8 @@ function buildHtml(updates: RepoUpdate[], groupName: string, config: Config, ico
   * { box-sizing: border-box; }
   body { margin: 0; font-family: "LXGW WenKai Mono", "Inconsolata", "Noto Sans CJK SC", "Noto Sans", "Segoe UI", sans-serif; background: ${theme.pageBg}; color: ${theme.textPrimary}; letter-spacing: 0.05em; }
   .container {
-    max-width: ${colCount * 580}px;
-    min-width: ${colCount * 460}px;
+    max-width: ${colCount * colWidth}px;
+    min-width: ${colCount * colWidth * 0.79}px;
     width: max-content;
     padding: 16px 14px 10px 14px;
     background: ${theme.pageOverlay};
@@ -615,7 +616,7 @@ export async function renderPuppeteerImage(ctx: Context, config: Config, updates
 
     const imageType = config.puppeteerImageType || 'jpeg'
     const quality = (imageType === 'jpeg' || imageType === 'webp') 
-      ? (config.puppeteerImageQuality || 75) 
+      ? (config.puppeteerImageQuality || 77) 
       : undefined
 
     const buffer = await page.screenshot({

@@ -184,3 +184,25 @@ export interface TypstRenderConfig {
   /** 最大提交数 */
   maxCommits: number
 }
+
+/**
+ * 动态发现源：GitHub/Gitee 用户或组织
+ */
+export interface DiscoverSource {
+  /** 平台 */
+  platform: 'github' | 'gitee'
+  /** 用户名或组织名 */
+  owner: string
+}
+
+/**
+ * 动态发现组：从多个用户/组织自动解析仓库并集
+ */
+export interface DiscoverGroup {
+  /** 生成的监控组名称（必须与同名 MonitorGroup 对应） */
+  name: string
+  /** 来源列表 */
+  sources: DiscoverSource[]
+  /** 是否在每次轮询/推送前同步仓库列表（默认 true） */
+  syncRepos: boolean
+}

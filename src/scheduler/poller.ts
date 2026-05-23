@@ -5,6 +5,7 @@ import { MonitorGroup, RepoUpdate } from '../types'
 import { GitService, parseRepoUrl } from '../services/git'
 import { StorageManager } from '../utils/storage'
 import { writeRepoUpdatesToJson } from '../utils/file-logger'
+import { RepoDiscoverer } from '../services/discover'
 import { Config } from '../config'
 
 /**
@@ -28,6 +29,7 @@ export class PollScheduler {
     private gitService: GitService,
     private storage: StorageManager,
     private config: Config,
+    private discoverer?: RepoDiscoverer,
   ) {
     this.logger = _ctx.logger('git-monitor:poll')
   }
@@ -172,6 +174,11 @@ export class PollScheduler {
     
     const task = this.tasks.get(group.name)
     if (!task) return
+
+    // 如果是动态发现组，先同步仓库列表
+    if (this.discoverer && this.config.discoverGroups?.some((dg: any) => dg.name === group.name && dg.syncRepos !== false)) {
+      await this.discoverer.syncDiscoverGroup(group.name)
+    }
     
     const totalRepos = group.repos.length
     const parallelCount = Math.max(1, this.config.parallelFetchCount || 1)

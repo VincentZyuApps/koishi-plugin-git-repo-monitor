@@ -1,11 +1,11 @@
 import { Schema } from 'koishi'
 
 const exampleRepoList: Array<{ url: string; branch: string; type: 'commits' | 'releases' }> = [
-  // 操作系统内核 & 发行版 & 包管理
+  // 🌐 操作系统内核 & 发行版 & 包管理
   { url: 'https://github.com/torvalds/linux', branch: 'master', type: 'commits' },
   { url: 'https://github.com/archlinux/linux', branch: 'master', type: 'commits' },
   { url: 'https://github.com/debian/dpkg', branch: 'main', type: 'commits' },
-  // 编程语言 & 运行时
+  // 🦊 编程语言 & 运行时
   { url: 'https://github.com/python/cpython', branch: 'main', type: 'commits' },
   { url: 'https://github.com/nodejs/node', branch: 'main', type: 'commits' },
   { url: 'https://github.com/microsoft/TypeScript', branch: 'main', type: 'commits' },
@@ -24,18 +24,18 @@ const exampleRepoList: Array<{ url: string; branch: string; type: 'commits' | 'r
   { url: 'https://github.com/ziglang/zig', branch: 'master', type: 'commits' },
   { url: 'https://github.com/oven-sh/bun', branch: 'main', type: 'commits' },
   { url: 'https://github.com/tc39/ecma262', branch: 'main', type: 'commits' },
-  // 编译器基础设施
+  // 🛠️ 编译器基础设施
   { url: 'https://github.com/llvm/llvm-project', branch: 'main', type: 'commits' },
   { url: 'https://github.com/gcc-mirror/gcc', branch: 'master', type: 'commits' },
   { url: 'https://github.com/microsoft/STL', branch: 'main', type: 'commits' },
 ]
 
 const exampleRepoList2: Array<{ url: string; branch: string; type: 'commits' | 'releases' }> = [
-  // 浏览器
+  // 🌍 浏览器
   { url: 'https://github.com/chromium/chromium', branch: 'main', type: 'commits' },
   { url: 'https://github.com/zen-browser/desktop', branch: 'dev', type: 'commits' },
   { url: 'https://github.com/brave/brave-browser', branch: 'master', type: 'commits' },
-  // 前端框架 & 工具
+  // ⚛️ 前端框架 & 工具
   { url: 'https://github.com/microsoft/TypeScript', branch: 'main', type: 'commits' },
   { url: 'https://github.com/microsoft/vscode', branch: 'main', type: 'commits' },
   { url: 'https://github.com/vuejs/core', branch: 'main', type: 'commits' },
@@ -43,32 +43,32 @@ const exampleRepoList2: Array<{ url: string; branch: string; type: 'commits' | '
   { url: 'https://github.com/vercel/next.js', branch: 'canary', type: 'commits' },
   { url: 'https://github.com/vitejs/vite', branch: 'main', type: 'commits' },
   { url: 'https://github.com/webpack/webpack', branch: 'main', type: 'commits' },
-  // 容器 & 云原生
+  // 🐳 容器 & 云原生
   { url: 'https://github.com/docker/compose', branch: 'main', type: 'commits' },
   { url: 'https://github.com/docker/cli', branch: 'master', type: 'commits' },
   { url: 'https://github.com/moby/moby', branch: 'master', type: 'commits' },
   { url: 'https://github.com/kubernetes/kubernetes', branch: 'master', type: 'commits' },
   { url: 'https://github.com/containerd/containerd', branch: 'main', type: 'commits' },
-  // 数据库
+  // 🗄️ 数据库
   { url: 'https://github.com/postgres/postgres', branch: 'master', type: 'commits' },
   { url: 'https://github.com/redis/redis', branch: 'unstable', type: 'commits' },
   { url: 'https://github.com/sqlite/sqlite', branch: 'master', type: 'commits' },
   { url: 'https://github.com/mongodb/mongo', branch: 'master', type: 'commits' },
   { url: 'https://github.com/mysql/mysql-server', branch: 'trunk', type: 'commits' },
-  // 基础工具
+  // 🔧 基础工具
   { url: 'https://github.com/git/git', branch: 'master', type: 'commits' },
   { url: 'https://github.com/curl/curl', branch: 'master', type: 'commits' },
   { url: 'https://github.com/FFmpeg/FFmpeg', branch: 'master', type: 'commits' },
   { url: 'https://github.com/nginx/nginx', branch: 'master', type: 'commits' },
   { url: 'https://github.com/openssl/openssl', branch: 'master', type: 'commits' },
   { url: 'https://github.com/systemd/systemd', branch: 'main', type: 'commits' },
-  // AI & ML
+  // 🤖 AI & ML
   { url: 'https://github.com/tensorflow/tensorflow', branch: 'master', type: 'commits' },
   { url: 'https://github.com/pytorch/pytorch', branch: 'main', type: 'commits' },
   { url: 'https://github.com/huggingface/transformers', branch: 'main', type: 'commits' },
   { url: 'https://github.com/ggerganov/llama.cpp', branch: 'master', type: 'commits' },
   { url: 'https://github.com/ollama/ollama', branch: 'main', type: 'commits' },
-  // 工具 & 面板
+  // 📦 工具 & 面板
   { url: 'https://github.com/astral-sh/uv', branch: 'main', type: 'commits' },
   { url: 'https://github.com/rustdesk/rustdesk', branch: 'master', type: 'commits' },
   { url: 'https://github.com/AlistGo/alist', branch: 'main', type: 'commits' },
@@ -77,55 +77,56 @@ const exampleRepoList2: Array<{ url: string; branch: string; type: 'commits' | '
 ]
 
 /**
- * 推送目标配置 Schema
+ * 📨 推送目标配置 Schema
  */
 export const PushTargetSchema = Schema.object({
   name: Schema.string()
     .required()
-    .description('推送目标名称（用于标识）'),
+    .description('📌 推送目标名称（用于标识）'),
   platform: Schema.string()
-    .required()
-    .description('推送平台（如 onebot）'),
+    /* .required() */
+    .description('📡 推送平台（如 onebot）'),
   channelId: Schema.string()
-    .required()
-    .description('频道 ID'),
+    /* .required() */
+    .description('🆔 频道 ID'),
   enabled: Schema.boolean()
     .default(true)
-    .description('是否启用此推送目标'),
-}).description('推送目标配置')
+    .description('✅ 是否启用此推送目标'),
+}).description('📨 推送目标配置')
 
 /**
- * 仓库配置 Schema
+ * 📦 仓库配置 Schema
  */
 export const RepoConfigSchema = Schema.object({
   url: Schema.string()
-    .required()
-    .description('仓库 URL（如 https://github.com/owner/repo）'),
+    /* .required() */
+    .description('🔗 仓库 URL（如 https://github.com/owner/repo）'),
   branch: Schema.string()
     .default('main')
-    .description('分支名称'),
+    .description('🌿 分支名称'),
   type: Schema.union(['commits', 'releases'] as const)
     .default('commits')
-    .description('监听类型'),
-}).description('仓库配置')
+    .description('👁️ 监听类型'),
+}).description('📦 仓库配置')
 
 /**
- * 监控组配置 Schema
+ * 📋 监控组配置 Schema
  */
 export const MonitorGroupSchema = Schema.object({
   name: Schema.string()
-    .required()
-    .description('监控组名称（⚠️ 必须唯一，作为系统内部标识符，重名将导致后续同名组被忽略）'),
+    .required() 
+    .description('🏷️ 监控组名称（⚠️ 必须唯一，作为系统内部标识符，重名将导致后续同名组被忽略）'),
   // ↑ name 是核心业务主键：用于 Map 索引、指令查找（git-monitor.check <组名>）、数据库持久化等
   pushTargets: Schema.array(PushTargetSchema)
-    .required()
+    /* .required() */
+    .default([])
     .role('table')
-    .description('推送目标列表（可以推送到多个频道）'),
+    .description('📬 推送目标列表（可以推送到多个频道）'),
   repos: Schema.array(RepoConfigSchema)
-    .required()
+    /* .required() */
     .default(exampleRepoList)
     .role('table')
-    .description('监听的仓库列表'),
+    .description('📂 监听的仓库列表'),
   pollCron: Schema.string()
     .default('0 * * * *')
     .description('轮询 Cron 表达式（检查更新频率）<br/>📌 常用示例：<br/>• `* * * * *` - 每分钟<br/>• `*/5 * * * *` - 每 5 分钟<br/>• `*/10 * * * *` - 每 10 分钟<br/>• `*/30 * * * *` - 每 30 分钟<br/>• `0 * * * *` - 每小时（整点）'),
@@ -134,8 +135,36 @@ export const MonitorGroupSchema = Schema.object({
     .description('推送 Cron 表达式（推送通知频率）<br/>📌 常用示例：<br/>• `0 * * * *` - 每小时（整点）<br/>• `0 */2 * * *` - 每 2 小时<br/>• `0 */6 * * *` - 每 6 小时<br/>• `0 */12 * * *` - 每 12 小时<br/>• `0 0 * * *` - 每天 0:00'),
   enabled: Schema.boolean()
     .default(true)
-    .description('是否启用此监控组'),
-}).description('监控组配置')
+    .description('✅ 是否启用此监控组'),
+}).description('📋 监控组配置')
+
+/**
+ * 🌐 动态发现源 Schema
+ */
+export const DiscoverSourceSchema = Schema.object({
+  platform: Schema.union(['github', 'gitee'] as const)
+    /* .required() */
+    .description('🌐 平台'),
+  owner: Schema.string()
+    /* .required() */
+    .description('👤 用户名或组织名'),
+}).description('🌐 动态发现源')
+
+/**
+ * 🔄 动态发现组 Schema
+ */
+export const DiscoverGroupSchema = Schema.object({
+  name: Schema.string()
+    .required()
+    .description('🏷️ 监控组名称（⚠️ 必须与上方的「监控组列表」中的某个监控组名称完全一致，否则系统无法匹配和同步。自动生成示例：如 "user1+user2"）'),
+  sources: Schema.array(DiscoverSourceSchema)
+    /* .required() */
+    .role('table')
+    .description('📑 来源列表（GitHub/Gitee 用户或组织）'),
+  syncRepos: Schema.boolean()
+    .default(true)
+    .description('🔄 每次轮询/推送前同步仓库列表（新增/移除的仓库自动更新）'),
+}).description('🔄 动态发现组配置<br/><br/>🔗 <b>pushTargets / pollCron / pushCron / enabled</b> 请在对应的「监控组列表」条目中配置，发现组通过 <b>name</b> 与监控组关联。')
 
 /**
  * 输出形式类型
@@ -161,6 +190,8 @@ function createOutputModeSchema(supportedModes: OutputMode[]) {
 /**
  * 代理协议类型
  */
+export type RepoSortOrder = 'alpha-asc' | 'alpha-desc' | 'time-desc' | 'time-asc'
+
 export type ProxyProtocol = 'http' | 'https' | 'socks4' | 'socks5' | 'socks5h'
 
 /**
@@ -187,6 +218,10 @@ export interface Config {
   /** 插件启动时是否立即执行一次轮询检查 */
   immediatePollOnStart: boolean
 
+  // ========== 🔎 动态发现分组配置 ==========
+  /** 动态发现组列表 */
+  discoverGroups: any[]
+
   // ========== 👋 主动指令触发配置 ==========
   /** 主动推送触发的输出形式 */
   activeOutputModes: OutputMode[]
@@ -196,6 +231,8 @@ export interface Config {
   pushCommandTarget: 'configured' | 'current' | 'both'
   /** 默认推送模式 */
   defaultPushMode: 'last' | 'new'
+  /** 仓库排序方式 */
+  repoSortOrder: RepoSortOrder
   /** 单仓库请求超时（毫秒） */
   repoFetchTimeout: number
 
@@ -224,6 +261,8 @@ export interface Config {
   puppeteerImageQuality: number
   /** Puppeteer 渲染列数 */
   puppeteerColumnCount: number
+  /** Puppeteer 每列宽度（像素） */
+  puppeteerColumnWidth: number
   /** Puppeteer 布局模式 */
   puppeteerLayoutMode: 'masonry' | 'equalized-row' | 'top-aligned'
   /** Puppeteer 卡片铺排顺序 */
@@ -318,6 +357,7 @@ export const Config: Schema<Config> = Schema.intersect([
         },
       ])
       .description('📋 监控组列表'),
+
     maxUpdatesPerRepo: Schema.number()
       .min(1)
       .max(99)
@@ -330,6 +370,13 @@ export const Config: Schema<Config> = Schema.intersect([
       .default(false)
       .description('⏯️ 插件启动时是否立即执行一次轮询检查'),
   }).description('⏰ 被动定时推送配置'),
+
+  Schema.object({
+    discoverGroups: Schema.array(DiscoverGroupSchema)
+      .role('table')
+      .default([])
+      .description('🔄 动态发现组：从 GitHub/Gitee 用户/组织自动解析仓库列表，支持自动同步新增/移除的仓库'),
+  }).description('🔎 动态发现分组设置'),
 
   Schema.object({
     activeOutputModes: createOutputModeSchema(['text', 'puppeteer-image', 'typst-image', 'forward'])
@@ -353,6 +400,15 @@ export const Config: Schema<Config> = Schema.intersect([
       .role('radio')
       .default('last')
       .description('🎯 git-monitor.push 指令的默认推送模式（未指定 -m 参数时使用）'),
+    repoSortOrder: Schema.union([
+      Schema.const('time-desc').description('⏱️ 时间降序：commit 时间最晚（最近更新）的排前面【默认】'),
+      Schema.const('time-asc').description('⏱️ 时间升序：commit 时间最早（最久远）的排前面'),
+      Schema.const('alpha-asc').description('🔤 字母升序：A → Z'),
+      Schema.const('alpha-desc').description('🔤 字母降序：Z → A'),
+    ])
+      .role('radio')
+      .default('time-desc')
+      .description('📊 仓库卡片排序方式'),
   }).description('👋 主动指令触发配置'),
 
   Schema.object({
@@ -407,11 +463,18 @@ export const Config: Schema<Config> = Schema.intersect([
     puppeteerImageQuality: Schema.number()
       .min(0).max(100).step(1)
       .default(77)
-      .description('📏 Puppeteer 截图质量 (0-100，数字越小文件越小)'),
+      .description('📏 Puppeteer 截图质量 0-100（仅对 JPEG / WebP 生效，PNG 无效）'),
     puppeteerColumnCount: Schema.number()
-      .min(1).max(5).step(1)
+      .min(1).max(10).step(1)
       .default(3)
-      .description('Layout Puppeteer 渲染列数（默认为1，增加列数会成倍增加图片宽度）'),
+      .description('🔢 Puppeteer 渲染列数（默认为3）'),
+    puppeteerColumnWidth: Schema.number()
+      .min(200).max(2000).step(10)
+      .default(580)
+      .description('📐 每列宽度（像素），默认 580px。<br/>'
+        + '• 总宽度 = 列数 × 列宽<br/>'
+        + '• 列数越多、列宽越大，图片越宽<br/>'
+        + '• 适当调小列宽可容纳更多列而不至于过宽'),
     puppeteerLayoutMode: Schema.union([
       Schema.const('masonry').description('模式 1 | 瀑布流 (Masonry)：紧凑排列，无行对齐，只在列数 ≥ 2 时生效'),
       Schema.const('equalized-row').description('模式 2 | 等高行 (Equalized Row)：每行高度与该行最高卡片一致'),
@@ -481,11 +544,11 @@ export const Config: Schema<Config> = Schema.intersect([
       .default(false)
       .description('🌐 是否启用代理'),
     proxyProtocol: Schema.union([
-      Schema.const('http' as const).description('HTTP 代理'),
-      Schema.const('https' as const).description('HTTPS 代理'),
-      Schema.const('socks4' as const).description('SOCKS4 代理'),
-      Schema.const('socks5' as const).description('SOCKS5 代理'),
-      Schema.const('socks5h' as const).description('SOCKS5h 代理 (支持远程DNS)'),
+      Schema.const('http' as const).description('🌐 HTTP 代理'),
+      Schema.const('https' as const).description('🔒 HTTPS 代理'),
+      Schema.const('socks4' as const).description('🧦 SOCKS4 代理'),
+      Schema.const('socks5' as const).description('🧦 SOCKS5 代理'),
+      Schema.const('socks5h' as const).description('🧦 SOCKS5h 代理 (支持远程DNS)'),
     ])
       .role('radio')
       .default('socks5h' as const)

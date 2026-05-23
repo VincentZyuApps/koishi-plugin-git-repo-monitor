@@ -7,6 +7,7 @@ import { PollScheduler } from './poller'
 import { TypstRenderer } from '../services/renderer-typst'
 import { StorageManager } from '../utils/storage'
 import { writeRepoUpdatesToJson } from '../utils/file-logger'
+import { RepoDiscoverer } from '../services/discover'
 import { renderTextSummary } from '../services/render-text'
 import { renderPuppeteerImage } from '../services/render-puppeteer'
 import { buildForwardNodes } from '../services/render-forward'
@@ -67,6 +68,7 @@ export class PushScheduler {
     private renderer: TypstRenderer,
     private storage: StorageManager,
     private config: Config,
+    private discoverer?: RepoDiscoverer,
   ) {
     this.logger = ctx.logger('git-monitor:push')
   }
@@ -138,6 +140,11 @@ export class PushScheduler {
     if (dryRun) {
       this.logger.info(`Dry-run: 使用 ${updates.length} 条假数据推送 ${group.name}`)
     }
+
+    // 如果是动态发现组，先同步仓库列表
+    if (this.discoverer && this.config.discoverGroups?.some((dg: any) => dg.name === group.name && dg.syncRepos !== false)) {
+      await this.discoverer.syncDiscoverGroup(group.name)
+    }
     
     // 输出仓库信息到 JSON 文件（如果启用了 verboseFileLog）
     if (this.config.verboseFileLog) {
@@ -192,7 +199,19 @@ export class PushScheduler {
     }
     
     this.logger.info(`准备推送 ${updates.length} 个更新到 ${enabledTargets.length} 个目标`)
-    
+
+    // 按配置排序
+    const sortedUpdates = [...updates].sort((a, b) => {
+      switch (this.config.repoSortOrder) {
+        case 'alpha-asc': return a.repo.url.localeCompare(b.repo.url)
+        case 'alpha-desc': return b.repo.url.localeCompare(a.repo.url)
+        case 'time-asc': return a.updateTime.getTime() - b.updateTime.getTime()
+        case 'time-desc':
+        default: return b.updateTime.getTime() - a.updateTime.getTime()
+      }
+    })
+    this.logger.debug(`排序方式: ${this.config.repoSortOrder || 'time-desc'}`)
+
     try {
       const modes = this.resolveOutputModes(trigger)
       this.logger.info(`解析输出模式: ${JSON.stringify({ trigger, selected: trigger === 'active' ? this.config.activeOutputModes : this.config.passiveOutputModes, resolved: modes })}`)
@@ -200,11 +219,11 @@ export class PushScheduler {
       // 构建消息组（图片分开发送）
       const messageGroups: h[][] = []
 
-      this.logger.info(`开始构建消息，更新数: ${updates.length}, 输出模式: ${modes.join(', ')}`)
+      this.logger.info(`开始构建消息，更新数: ${sortedUpdates.length}, 输出模式: ${modes.join(', ')}`)
 
       // 文字消息（如果有）
       if (modes.includes('text')) {
-        const summary = renderTextSummary(updates, group.name, this.config)
+        const summary = renderTextSummary(sortedUpdates, group.name, this.config)
         messageGroups.push([h.text(summary)])
         this.logger.info(`添加文字消息，长度: ${summary.length}`)
       }
@@ -212,8 +231,8 @@ export class PushScheduler {
       // Typst 图片（单独一条消息）
       if (modes.includes('typst-image')) {
         try {
-          this.logger.info(`开始渲染 Typst 图片，更新数: ${updates.length}`)
-          const image = await this.renderer.renderBatchUpdates(updates, group.name)
+          this.logger.info(`开始渲染 Typst 图片，更新数: ${sortedUpdates.length}`)
+          const image = await this.renderer.renderBatchUpdates(sortedUpdates, group.name)
           if (image) {
             messageGroups.push([h.image(image, 'image/png')])
             this.logger.info(`Typst 图片渲染成功，大小: ${image.length} bytes`)
@@ -228,8 +247,8 @@ export class PushScheduler {
       // Puppeteer 图片（单独一条消息）
       if (modes.includes('puppeteer-image')) {
         try {
-          this.logger.info(`开始渲染 Puppeteer 图片，更新数: ${updates.length}`)
-          const image = await renderPuppeteerImage(this.ctx, this.config, updates, group.name)
+          this.logger.info(`开始渲染 Puppeteer 图片，更新数: ${sortedUpdates.length}`)
+          const image = await renderPuppeteerImage(this.ctx, this.config, sortedUpdates, group.name)
           if (image) {
             messageGroups.push([h.image(image, 'image/png')])
             this.logger.info(`Puppeteer 图片渲染成功，大小: ${image.length} bytes`)
@@ -257,7 +276,7 @@ export class PushScheduler {
           // 发送合并转发（仅支持 OneBot）
           if (modes.includes('forward')) {
             try {
-              await this.sendForwardMessage(target.platform, target.channelId, updates, group.name)
+              await this.sendForwardMessage(target.platform, target.channelId, sortedUpdates, group.name)
             } catch (error) {
               this.logger.error(`合并转发异常: ${(error as Error).message}`)
             }

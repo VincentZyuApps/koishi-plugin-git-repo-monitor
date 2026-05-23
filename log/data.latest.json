@@ -1,76 +1,76 @@
 {
-  "timestamp": "2026-05-17T15:00:00.121Z",
-  "groupName": "qwq",
+  "timestamp": "2026-05-23T22:00:00.407Z",
+  "groupName": "awa",
   "updateCount": 3,
   "updates": [
     {
-      "repoName": "deno",
-      "repoOwner": "denoland",
-      "repoUrl": "https://github.com/denoland/deno",
+      "repoName": "chromium",
+      "repoOwner": "chromium",
+      "repoUrl": "https://github.com/chromium/chromium",
       "branch": "main",
       "type": "commits",
       "commitCount": 1,
       "latestCommit": {
-        "sha": "19e63a0eee6c9e58016de155a956165786fbff50",
-        "shortSha": "19e63a0",
-        "message": "chore: ignore es-module/test-cjs-legacyMainResolve tests (#34186)\n\n\n\nCo-authored-by: divybot <divybot@users.noreply.github.com>\nCo-authored-by: Divy Srivastava <me@littledivy.com>",
-        "author": "em",
-        "authorEmail": "em@littledivy.com",
-        "date": "2026-05-17T14:47:52.000Z",
-        "url": "https://github.com/denoland/deno/commit/19e63a0eee6c9e58016de155a956165786fbff50",
+        "sha": "0639a0c48effc1c8b24fec82895b1b2aa107a41d",
+        "shortSha": "0639a0c",
+        "message": "Roll Chrome Mac PGO Profile\n\nRoll Chrome Mac PGO profile from chrome-mac-main-1779537184-0cac91972eff5f02b4b4d0934a3ac52e0131c593-2f3accf42bb91168baf46456e7729d2929d8cacb.profdata to chrome-mac-main-1779558528-15f63c095d8704563b3b2b999935907c007c05ef-2a0fa028ec92e379537d20d586258766eddce9a1.profdata\n\nIf this roll has caused a breakage, revert this CL and stop the roller\nusing the controls here:\nhttps://autoroll.skia.org/r/pgo-mac-chromium\nPlease CC chrome-brapp-engprod@google.com,pgo-profile-sheriffs@google.com on the revert to ensure that a human\nis aware of the problem.\n\nTo file a bug in Chromium: https://bugs.chromium.org/p/chromium/issues/entry\n\nTo report a problem with the AutoRoller itself, please file a bug:\nhttps://issues.skia.org/issues/new?component=1389291&template=1850622\n\nDocumentation for the AutoRoller is here:\nhttps://skia.googlesource.com/buildbot/+doc/main/autoroll/README.md\n\nCq-Include-Trybots: luci.chrome.try:mac-chrome\nTbr: pgo-profile-sheriffs@google.com\nMerge-Approval-Bypass: Chrome autoroller\nChange-Id: Ic18ab3725209f1d6d27b446f4fc9c0ae09f559cf\nReviewed-on: https://chromium-review.googlesource.com/c/chromium/src/+/7872806\nBot-Commit: chromium-autoroll@skia-public.iam.gserviceaccount.com <chromium-autoroll@skia-public.iam.gserviceaccount.com>\nCommit-Queue: chromium-autoroll@skia-public.iam.gserviceaccount.com <chromium-autoroll@skia-public.iam.gserviceaccount.com>\nCr-Commit-Position: refs/heads/main@{#1635456}",
+        "author": "chromium-autoroll@skia-public.iam.gserviceaccount.com",
+        "authorEmail": "chromium-autoroll@skia-public.iam.gserviceaccount.com",
+        "date": "2026-05-23T21:32:24.000Z",
+        "url": "https://github.com/chromium/chromium/commit/0639a0c48effc1c8b24fec82895b1b2aa107a41d",
         "stats": {
           "files": 1,
-          "additions": 8,
-          "deletions": 0
+          "additions": 1,
+          "deletions": 1
         }
       },
-      "updateTime": "2026-05-17T14:50:05.616Z"
+      "updateTime": "2026-05-23T21:40:04.388Z"
     },
     {
-      "repoName": "php-src",
-      "repoOwner": "php",
-      "repoUrl": "https://github.com/php/php-src",
+      "repoName": "llama.cpp",
+      "repoOwner": "ggerganov",
+      "repoUrl": "https://github.com/ggerganov/llama.cpp",
       "branch": "master",
       "type": "commits",
       "commitCount": 1,
       "latestCommit": {
-        "sha": "78277542074b833c997164175481e6c4a153fc96",
-        "shortSha": "7827754",
-        "message": "ext/intl: Fix merge conflict markers in spoofchecker_arginfo.h (#22072)",
-        "author": "Jorg Adam Sowa",
-        "authorEmail": "jorg.sowa@gmail.com",
-        "date": "2026-05-17T13:56:57.000Z",
-        "url": "https://github.com/php/php-src/commit/78277542074b833c997164175481e6c4a153fc96",
+        "sha": "b22ff4b7b43b6d0d91636f85692ff216cb7cb607",
+        "shortSha": "b22ff4b",
+        "message": "cmake/ui : refactor the build (#23352)",
+        "author": "Aldehir Rojas",
+        "authorEmail": "hello@alde.dev",
+        "date": "2026-05-23T21:08:22.000Z",
+        "url": "https://github.com/ggml-org/llama.cpp/commit/b22ff4b7b43b6d0d91636f85692ff216cb7cb607",
         "stats": {
-          "files": 1,
-          "additions": 0,
-          "deletions": 12
+          "files": 17,
+          "additions": 645,
+          "deletions": 439
         }
       },
-      "updateTime": "2026-05-17T14:00:04.753Z"
+      "updateTime": "2026-05-23T21:10:06.254Z"
     },
     {
-      "repoName": "runtime",
-      "repoOwner": "dotnet",
-      "repoUrl": "https://github.com/dotnet/runtime",
+      "repoName": "vscode",
+      "repoOwner": "microsoft",
+      "repoUrl": "https://github.com/microsoft/vscode",
       "branch": "main",
       "type": "commits",
       "commitCount": 1,
       "latestCommit": {
-        "sha": "db4b5d322efd2cab2287e15200a0b16332b41407",
-        "shortSha": "db4b5d3",
-        "message": "[Wasm/Ryujit] Fix if stack depth; fix pep call ordering (#128242)\n\nAccount for additional control flow stack depth added during codegen\nwhen using `if/end`.\n\nFix argument eval ordering for PEP calls so the PEP is pushed as the\nlast arg, and then pushed and indirected to get the function index.",
-        "author": "Andy Ayers",
-        "authorEmail": "andya@microsoft.com",
-        "date": "2026-05-17T14:49:51.000Z",
-        "url": "https://github.com/dotnet/runtime/commit/db4b5d322efd2cab2287e15200a0b16332b41407",
+        "sha": "8e2b2613647b61fc7eccb43242c6b7b2da28d7de",
+        "shortSha": "8e2b261",
+        "message": "Don't group built-in tools when tool search is active (#318123)\n\nWhen tool search is active, built-in tools were being collapsed into virtual groups that tool search never surfaces, making non-deferred tools (e.g. askQuestions) uncallable. Detect tool_search from the full tool list and skip built-in grouping in that case. Fixes #316779.",
+        "author": "Bhavya U",
+        "authorEmail": "bhavyau@microsoft.com",
+        "date": "2026-05-23T21:16:28.000Z",
+        "url": "https://github.com/microsoft/vscode/commit/8e2b2613647b61fc7eccb43242c6b7b2da28d7de",
         "stats": {
-          "files": 3,
-          "additions": 62,
-          "deletions": 14
+          "files": 1,
+          "additions": 8,
+          "deletions": 2
         }
       },
-      "updateTime": "2026-05-17T14:50:05.484Z"
+      "updateTime": "2026-05-23T21:20:05.420Z"
     }
   ]
 }

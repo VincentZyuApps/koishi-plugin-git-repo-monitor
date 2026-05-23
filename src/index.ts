@@ -1,12 +1,13 @@
 import { Context, Session, h } from 'koishi'
 import fs from 'node:fs'
 import { Config } from './config'
-import { RepoState, PushRecord } from './types'
+import { RepoState, PushRecord, DiscoverSource, GitCommit } from './types'
 import { GitService } from './services/git'
 import { TypstRenderer } from './services/renderer-typst'
 import { PollScheduler } from './scheduler/poller'
 import { PushScheduler } from './scheduler/pusher'
 import { StorageManager } from './utils/storage'
+import { RepoDiscoverer } from './services/discover'
 
 // 导入类型声明
 import {} from 'koishi-plugin-to-image-service'
@@ -76,11 +77,11 @@ export const usage = `
   <td><code>git-monitor.check qwq</code></td>
 </tr>
 <tr>
-  <td><code>git-monitor.push &lt;组名&gt; [-m mode]</code></td>
-  <td>手动触发推送<br>
-  • <code>-m new</code> (默认): 仅推送新更新<br>
-  • <code>-m last</code>: 强制推送最新状态</td>
-  <td><code>git-monitor.push qwq</code><br><code>git-monitor.push qwq -m last</code></td>
+  <td><code>git-monitor.discover &lt;urls&gt; [-n name] [--no-sync]</code></td>
+  <td>从 GitHub/Gitee 用户或组织创建动态监控组<br>
+  • <code>-n &lt;名称&gt;</code>: 指定组名<br>
+  • <code>--no-sync</code>: 创建后不同步仓库列表</td>
+  <td><code>git-monitor.discover https://github.com/owner1</code><br><code>git-monitor.discover https://github.com/owner1 -n my-group</code></td>
 </tr>
 <tr>
   <td><code>git-monitor.dryrun [-n count]</code></td>
@@ -90,9 +91,26 @@ export const usage = `
   <td><code>git-monitor.dryrun</code><br><code>git-monitor.dryrun -n 20</code></td>
 </tr>
 <tr>
-  <td><code>git-monitor.list</code></td>
-  <td>列出所有监控仓库</td>
-  <td><code>git-monitor.list</code></td>
+  <td><code>git-monitor.inspect &lt;组名&gt; [-p page] [-l limit] [-s sort] [-v]</code></td>
+  <td>查看监控组仓库详情<br>
+  • <code>-p &lt;页码&gt;</code>: 页码 (默认1)<br>
+  • <code>-l &lt;数量&gt;</code>: 每页条数 (默认10)<br>
+  • <code>-s &lt;方式&gt;</code>: time-desc(默认)/time-asc/alpha-asc/alpha-desc<br>
+  • <code>-v</code>: 显示最新 commit 详情</td>
+  <td><code>git-monitor.inspect qwq</code><br><code>git-monitor.inspect qwq -p 2 -l 20 -s alpha-asc</code></td>
+</tr>
+<tr>
+  <td><code>git-monitor.list [--verbose]</code></td>
+  <td>列出所有监控组概要<br>
+  • <code>--verbose</code>: 显示全部仓库详情（⚠️可能超限）</td>
+  <td><code>git-monitor.list</code><br><code>git-monitor.list --verbose</code></td>
+</tr>
+<tr>
+  <td><code>git-monitor.push &lt;组名&gt; [-m mode]</code></td>
+  <td>手动触发推送<br>
+  • <code>-m new</code> (默认): 仅推送新更新<br>
+  • <code>-m last</code>: 强制推送最新状态</td>
+  <td><code>git-monitor.push qwq</code><br><code>git-monitor.push qwq -m last</code></td>
 </tr>
 </tbody>
 </table>
@@ -218,8 +236,9 @@ export function apply(ctx: Context, config: Config) {
   const gitService = new GitService(ctx, config, config.githubToken, config.giteeToken)
   const storage = new StorageManager(ctx)
   const renderer = new TypstRenderer(ctx, config)
-  const pollScheduler = new PollScheduler(ctx, gitService, storage, config)
-  const pushScheduler = new PushScheduler(ctx, pollScheduler, renderer, storage, config)
+  const discoverer = new RepoDiscoverer(ctx, config)
+  const pollScheduler = new PollScheduler(ctx, gitService, storage, config, discoverer)
+  const pushScheduler = new PushScheduler(ctx, pollScheduler, renderer, storage, config, discoverer)
 
   const formatCommandReply = (session: Session | undefined, content: string) => {
     if (config.quoteCommandReplies && session?.messageId) {
@@ -254,9 +273,25 @@ export function apply(ctx: Context, config: Config) {
     }
   })
 
+  // ============ 动态发现组校验 ============
+  if (config.discoverGroups?.length) {
+    const mgNames = new Set((config.monitorGroups || []).map((g: any) => g.name))
+    for (const dg of config.discoverGroups) {
+      if (!mgNames.has(dg.name)) {
+        logger.error(`❌ 动态发现组 "${dg.name}" 未找到同名的监控组！请确保「动态发现组配置」中的 name 与「监控组列表」中的某个 name 完全一致`)
+      }
+    }
+  }
+
   // ============ 启动监控任务 ============
-  ctx.on('ready', () => {
+  ctx.on('ready', async () => {
     logger.info('Git 仓库监控插件启动')
+
+    // 同步动态发现组
+    if (config.discoverGroups?.length) {
+      logger.info(`检测到 ${config.discoverGroups.length} 个动态发现组，开始同步仓库列表...`)
+      await discoverer.syncAllDiscoverGroups()
+    }
     
     if (!config.monitorGroups || config.monitorGroups.length === 0) {
       logger.warn('未配置监控组，请在配置中添加监控组')
@@ -370,32 +405,209 @@ export function apply(ctx: Context, config: Config) {
       }
     })
 
-  ctx.command('git-monitor.list', '列出所有监控仓库')
-    .action(({ session }) => {
+  ctx.command('git-monitor.list', '列出所有监控仓库（不建议使用--verbose参数，可能超出平台消息长度限制）')
+    .option('verbose', '--verbose 显示完整仓库列表')
+    .action(({ session, options }) => {
       if (!config.monitorGroups || config.monitorGroups.length === 0) {
         return formatCommandReply(session, '未配置监控组')
       }
       
+      const verbose = options?.verbose
       const lines = ['📋 监控仓库列表\n']
       
       for (const group of config.monitorGroups) {
-        // 显示所有推送目标
         const targets = group.pushTargets
           .filter((t: any) => t.enabled !== false)
           .map((t: any) => `{${t.platform}:${t.channelId}}`)
           .join(', ')
         lines.push(`📦 ${group.name} → [${targets || '无推送目标'}]`)
         
-        for (const repo of group.repos) {
-          const typeIcon = repo.type === 'commits' ? '📝' : '🎉'
-          const branch = repo.branch || 'main'
-          lines.push(`  ${typeIcon} ${repo.url} [${branch}] - ${repo.type}`)
+        if (verbose) {
+          for (const repo of group.repos) {
+            const typeIcon = repo.type === 'commits' ? '📝' : '🎉'
+            const branch = repo.branch || 'main'
+            lines.push(`  ${typeIcon} ${repo.url} [${branch}] - ${repo.type}`)
+          }
         }
         
+        lines.push(`  📊 仓库总数: ${group.repos.length}`)
         lines.push(`  ⏰ 轮询: ${group.pollCron} | 推送: ${group.pushCron}\n`)
       }
       
       return formatCommandReply(session, lines.join('\n'))
+    })
+
+  ctx.command('git-monitor.inspect <group:string>', '查看监控组仓库详细信息')
+    .option('page', '-p <page:number> 页码', { fallback: 1 })
+    .option('limit', '-l <limit:number> 每页显示数量', { fallback: 10 })
+    .option('sort', '-s <sort:string> 排序方式：time-desc(默认)/time-asc/alpha-asc/alpha-desc')
+    .option('verbose', '-v 显示最新 commit 详情（时间/hash/作者/统计/消息）')
+    .action(async ({ session, options }, group) => {
+      if (!group) {
+        return formatCommandReply(session, '请指定监控组名称')
+      }
+
+      const monitorGroup = config.monitorGroups.find((g: any) => g.name === group)
+      if (!monitorGroup) {
+        return formatCommandReply(session, `❌ 未找到监控组: ${group}`)
+      }
+
+      const sortOrder = (options?.sort as string) || 'time-desc'
+      const sortedRepos = [...monitorGroup.repos].sort((a: any, b: any) => {
+        switch (sortOrder) {
+          case 'alpha-asc':  return a.url.localeCompare(b.url)
+          case 'alpha-desc': return b.url.localeCompare(a.url)
+          case 'time-asc':   return 1
+          case 'time-desc':
+          default:           return -1
+        }
+      })
+
+      const page = Math.max(1, Number(options?.page) || 1)
+      const limit = Math.max(1, Math.min(100, Number(options?.limit) || 10))
+      const totalRepos = sortedRepos.length
+      const totalPages = Math.ceil(totalRepos / limit) || 1
+      const clampedPage = Math.min(page, totalPages)
+      const startIdx = (clampedPage - 1) * limit
+      const pagedRepos = sortedRepos.slice(startIdx, startIdx + limit)
+
+      const verbose = options?.verbose
+      let latestCommits: (GitCommit | null)[] = []
+      if (verbose) {
+        latestCommits = await Promise.all(
+          pagedRepos.map(async (repo: any) => {
+            try {
+              const commits = await gitService.getCommits(repo.url, repo.branch || 'main')
+              return commits[0] || null
+            } catch {
+              return null
+            }
+          })
+        )
+      }
+
+      const targets = monitorGroup.pushTargets
+        .filter((t: any) => t.enabled !== false)
+        .map((t: any) => `{${t.platform}:${t.channelId}}`)
+        .join(', ')
+
+      const lines = [`📋 监控组详情: ${group}\n`]
+      lines.push(`📦 ${group} → [${targets || '无推送目标'}]`)
+      lines.push(`✅ 状态: ${monitorGroup.enabled !== false ? '启用' : '已禁用'}`)
+      lines.push(`📊 仓库总数: ${totalRepos}`)
+      lines.push(`⏰ 轮询: ${monitorGroup.pollCron} | 推送: ${monitorGroup.pushCron}\n`)
+
+      lines.push(`📂 仓库列表 (第 ${clampedPage}/${totalPages} 页):`)
+      for (let i = 0; i < pagedRepos.length; i++) {
+        const repo = pagedRepos[i]
+        const typeIcon = repo.type === 'commits' ? '📝' : '🎉'
+        const branch = repo.branch || 'main'
+        let line = `  ${typeIcon} 🔗${repo.url}🔗 🌿${branch}🌿 ${typeIcon}${repo.type}${typeIcon}`
+        if (verbose) {
+          const c = latestCommits[i]
+          if (c) {
+            const time = c.date.toLocaleString('zh-CN', { hour12: false })
+            const msg = c.message.length > 30 ? c.message.substring(0, 30) + '…' : c.message
+            const stats = c.stats
+              ? ` 📊+${c.stats.additions}/-${c.stats.deletions} (${c.stats.files}f)📊`
+              : ''
+            line += `\n     🕐${time}🕐 #️⃣${c.shortSha}#️⃣ 👤${c.author}👤${stats}`
+            line += `\n     💬${msg}💬`
+          } else {
+            line += '\n     🕐N/A🕐'
+          }
+        }
+        lines.push(line)
+      }
+
+      if (totalPages > 1) {
+        lines.push(`\n💡 使用 -p <页码> 翻页，-l <数量> 调整每页显示数量`)
+      }
+
+      return formatCommandReply(session, lines.join('\n'))
+    })
+
+  ctx.command('git-monitor.discover <urls:text>', '从 GitHub/Gitee 用户或组织创建动态监控组')
+    .option('name', '-n <name> 指定监控组名称（默认自动生成）')
+    .option('no-sync', '--no-sync 创建后不同步仓库列表（下次轮询自动同步）')
+    .usage('传入一个或多个 GitHub/Gitee 个人主页或组织主页 URL，用空格隔开\n'
+      + '示例：git-monitor.discover https://github.com/owner1 https://gitee.com/owner2')
+    .action(async ({ session, options }, urls) => {
+      if (!urls) {
+        return formatCommandReply(session, '请提供至少一个 GitHub/Gitee 用户或组织 URL')
+      }
+
+      const urlList = urls.split(/\s+/).filter(Boolean)
+      const sources: { platform: 'github' | 'gitee'; owner: string; url: string }[] = []
+
+      for (const url of urlList) {
+        const match = url.match(/(?:https?:\/\/)?(github|gitee)\.(?:com|cn)\/([^\/\s]+)/)
+        if (!match) {
+          return formatCommandReply(session, `❌ 无法识别的 URL: ${url}\n支持的格式：https://github.com/owner 或 https://gitee.com/owner`)
+        }
+        const platform = match[1] === 'gitee' ? 'gitee' : 'github'
+        sources.push({ platform, owner: match[2], url })
+      }
+
+      const ownerNames = sources.map(s => s.owner)
+      const groupName = options?.name || ownerNames.join('+')
+
+      if (config.monitorGroups?.some((g: any) => g.name === groupName)) {
+        return formatCommandReply(session, `❌ 监控组 "${groupName}" 已存在，请使用不同的名称或删除现有组`)
+      }
+
+      // 创建 DiscoverGroup
+      const dg: any = {
+        name: groupName,
+        sources: sources.map(s => ({ platform: s.platform, owner: s.owner })),
+        syncRepos: !options?.['no-sync'],
+      }
+
+      config.discoverGroups = config.discoverGroups || []
+      config.discoverGroups.push(dg)
+
+      // 创建对应的 MonitorGroup
+      const mg: any = {
+        name: groupName,
+        pushTargets: [],
+        repos: [],
+        pollCron: '0 * * * *',
+        pushCron: '0 */12 * * *',
+        enabled: true,
+      }
+      config.monitorGroups = config.monitorGroups || []
+      config.monitorGroups.push(mg)
+
+      const sourceSummary = sources.map(s => `${s.platform}/${s.owner}`).join(', ')
+
+      let syncMsg = ''
+      if (dg.syncRepos) {
+        if (session) await session.send(formatCommandReply(session, `🔍 正在发现 ${sourceSummary} 的仓库...`))
+        try {
+          const result = await discoverer.syncDiscoverGroup(groupName)
+          syncMsg = `\n已同步仓库列表: 新增 ${result.added} 个仓库`
+        } catch (error) {
+          logger.error(`同步失败:`, error)
+          syncMsg = `\n⚠️ 首次同步失败: ${(error as Error).message}`
+        }
+      }
+
+      ctx.scope.update(config, false)
+
+      try {
+        pollScheduler.start(mg)
+        pushScheduler.start(mg)
+      } catch (error) {
+        logger.error(`启动新监控组调度器失败 ${groupName}:`, error)
+      }
+
+      return formatCommandReply(session,
+        `✅ 已创建动态监控组 "${groupName}"`
+        + `\n└─ 🌐 来源: ${sourceSummary}`
+        + (syncMsg ? `\n└─ 📦 ${syncMsg.replace(/^[\s\n]*/, '')}` : '')
+        + `\n\n使用:`
+        + `\n  🚀 \`git-monitor.push ${groupName} -m last\`  → 立即推送查看效果`
+        + `\n  📋 \`git-monitor.discover ... --no-sync\`  → 仅创建，不同步`)
     })
 
   // ============ 清理任务 ============

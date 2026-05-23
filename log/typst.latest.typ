@@ -18,118 +18,80 @@
 #v(20pt)
 
 // 仓库更新列表
-// Commit 1: 19E63A0
+// Commit 1: 837910D
 #block(width: 100%, fill: rgb(246, 248, 250), radius: 10pt, inset: (x: 16pt, y: 14pt), stroke: 1pt + rgb(208, 215, 222))[
   // 第一行：平台图标 + 仓库名
   #box(baseline: 2pt)[#text(size: 14pt)[🐙]]
   #h(6pt)
-  #text(size: 12pt, weight: "bold")[denoland/deno]
+  #text(size: 12pt, weight: "bold")[nodejs/node]
   
   #v(4pt)
   
   // 第二行：分支 + commit hash
   #text(size: 10pt, fill: rgb(101, 109, 118))[⎇ main]
   #h(12pt)
-  #text(size: 10pt, fill: rgb(130, 80, 223))[↓ 19E63A0]
+  #text(size: 10pt, fill: rgb(130, 80, 223))[↓ 837910D]
   
   #v(10pt)
   
   // 第三行：作者信息
-  #text(size: 10pt, weight: "medium", fill: rgb(9, 105, 218))[em]
+  #text(size: 10pt, weight: "medium", fill: rgb(9, 105, 218))[Trivikram Kamat]
   #text(size: 10pt, fill: rgb(101, 109, 118))[ 提交于 ]
-  #text(size: 10pt)[12分钟前]
+  #text(size: 10pt)[16分钟前]
   
   #v(8pt)
   
   // 第四行：Commit 标题（加粗加大）
-  #text(size: 13pt, weight: "bold")[chore: ignore es-module/test-cjs-legacyMainResolve tests (\#34186)]
+  #text(size: 13pt, weight: "bold")[stream: flush each fused stateless transform]
   
   #v(6pt)
-  #text(size: 10pt, fill: rgb(101, 109, 118))[Co-authored-by: divybot <divybot@users.noreply.github.com> Co-authored-by: Divy Srivastava <me@littledivy.com>]
-  #v(10pt)
-  
-  // 第五行：文件变化统计
-  #text(size: 10pt, fill: rgb(101, 109, 118))[1 个文件发生了变化，影响行数：]
-  #text(size: 10pt, weight: "bold", fill: rgb(26, 127, 55))[+8]
-  #h(4pt)
-  #text(size: 10pt, weight: "bold", fill: rgb(207, 34, 46))[-0]
-]
-
-#v(16pt)
-
-// Commit 1: 7827754
-#block(width: 100%, fill: rgb(246, 248, 250), radius: 10pt, inset: (x: 16pt, y: 14pt), stroke: 1pt + rgb(208, 215, 222))[
-  // 第一行：平台图标 + 仓库名
-  #box(baseline: 2pt)[#text(size: 14pt)[🐙]]
-  #h(6pt)
-  #text(size: 12pt, weight: "bold")[php/php-src]
-  
-  #v(4pt)
-  
-  // 第二行：分支 + commit hash
-  #text(size: 10pt, fill: rgb(101, 109, 118))[⎇ master]
-  #h(12pt)
-  #text(size: 10pt, fill: rgb(130, 80, 223))[↓ 7827754]
-  
-  #v(10pt)
-  
-  // 第三行：作者信息
-  #text(size: 10pt, weight: "medium", fill: rgb(9, 105, 218))[Jorg Adam Sowa]
-  #text(size: 10pt, fill: rgb(101, 109, 118))[ 提交于 ]
-  #text(size: 10pt)[1小时前]
-  
-  #v(8pt)
-  
-  // 第四行：Commit 标题（加粗加大）
-  #text(size: 13pt, weight: "bold")[ext/intl: Fix merge conflict markers in spoofchecker_arginfo.h (\#22072)]
-  
-  
-  #v(10pt)
-  
-  // 第五行：文件变化统计
-  #text(size: 10pt, fill: rgb(101, 109, 118))[1 个文件发生了变化，影响行数：]
-  #text(size: 10pt, weight: "bold", fill: rgb(26, 127, 55))[+0]
-  #h(4pt)
-  #text(size: 10pt, weight: "bold", fill: rgb(207, 34, 46))[-12]
-]
-
-#v(16pt)
-
-// Commit 1: DB4B5D3
-#block(width: 100%, fill: rgb(246, 248, 250), radius: 10pt, inset: (x: 16pt, y: 14pt), stroke: 1pt + rgb(208, 215, 222))[
-  // 第一行：平台图标 + 仓库名
-  #box(baseline: 2pt)[#text(size: 14pt)[🐙]]
-  #h(6pt)
-  #text(size: 12pt, weight: "bold")[dotnet/runtime]
-  
-  #v(4pt)
-  
-  // 第二行：分支 + commit hash
-  #text(size: 10pt, fill: rgb(101, 109, 118))[⎇ main]
-  #h(12pt)
-  #text(size: 10pt, fill: rgb(130, 80, 223))[↓ DB4B5D3]
-  
-  #v(10pt)
-  
-  // 第三行：作者信息
-  #text(size: 10pt, weight: "medium", fill: rgb(9, 105, 218))[Andy Ayers]
-  #text(size: 10pt, fill: rgb(101, 109, 118))[ 提交于 ]
-  #text(size: 10pt)[10分钟前]
-  
-  #v(8pt)
-  
-  // 第四行：Commit 标题（加粗加大）
-  #text(size: 13pt, weight: "bold")[\[Wasm/Ryujit\] Fix if stack depth; fix pep call ordering (\#128242)]
-  
-  #v(6pt)
-  #text(size: 10pt, fill: rgb(101, 109, 118))[Account for additional control flow stack depth added during codegen when using \`if/end\`.  Fix argument eval ordering for PEP calls so the PEP is pushed as the last arg, and then pushed and indirected to get the function index.]
+  #text(size: 10pt, fill: rgb(101, 109, 118))[Ensure consecutive stateless stream/iter transforms each receive a final null flush after upstream flush output has been processed.  Fixes: https://github.com/nodejs/node/issues/63467  Signed-off-by: Kamat, Trivikram <16024985+trivikr@users.noreply.github.com> Assisted-by: openai:gpt-5.5 PR-URL: htt]
   #v(10pt)
   
   // 第五行：文件变化统计
   #text(size: 10pt, fill: rgb(101, 109, 118))[3 个文件发生了变化，影响行数：]
-  #text(size: 10pt, weight: "bold", fill: rgb(26, 127, 55))[+62]
+  #text(size: 10pt, weight: "bold", fill: rgb(26, 127, 55))[+76]
   #h(4pt)
-  #text(size: 10pt, weight: "bold", fill: rgb(207, 34, 46))[-14]
+  #text(size: 10pt, weight: "bold", fill: rgb(207, 34, 46))[-30]
+]
+
+#v(16pt)
+
+// Commit 1: 8B56D41
+#block(width: 100%, fill: rgb(246, 248, 250), radius: 10pt, inset: (x: 16pt, y: 14pt), stroke: 1pt + rgb(208, 215, 222))[
+  // 第一行：平台图标 + 仓库名
+  #box(baseline: 2pt)[#text(size: 14pt)[🐙]]
+  #h(6pt)
+  #text(size: 12pt, weight: "bold")[llvm/llvm-project]
+  
+  #v(4pt)
+  
+  // 第二行：分支 + commit hash
+  #text(size: 10pt, fill: rgb(101, 109, 118))[⎇ main]
+  #h(12pt)
+  #text(size: 10pt, fill: rgb(130, 80, 223))[↓ 8B56D41]
+  
+  #v(10pt)
+  
+  // 第三行：作者信息
+  #text(size: 10pt, weight: "medium", fill: rgb(9, 105, 218))[Florian Hahn]
+  #text(size: 10pt, fill: rgb(101, 109, 118))[ 提交于 ]
+  #text(size: 10pt)[55分钟前]
+  
+  #v(8pt)
+  
+  // 第四行：Commit 标题（加粗加大）
+  #text(size: 13pt, weight: "bold")[\[VPlan\] Create casts before ComputeReductionResult (NFC). (\#199372)]
+  
+  #v(6pt)
+  #text(size: 10pt, fill: rgb(101, 109, 118))[This ensures ComputeReductionResult is created with operands that have their correct types set at construction.]
+  #v(10pt)
+  
+  // 第五行：文件变化统计
+  #text(size: 10pt, fill: rgb(101, 109, 118))[1 个文件发生了变化，影响行数：]
+  #text(size: 10pt, weight: "bold", fill: rgb(26, 127, 55))[+30]
+  #h(4pt)
+  #text(size: 10pt, weight: "bold", fill: rgb(207, 34, 46))[-34]
 ]
 
 #v(24pt)
@@ -140,5 +102,49 @@
   #v(4pt)
   #text(size: 8pt, fill: rgb(139, 148, 158))[https://github.com/VincentZyuApps/koishi-plugin-git-repo-monitor]
   #v(2pt)
-  #text(size: 8pt, fill: rgb(139, 148, 158))[2026-05-17 23:00:00]
+  #text(size: 8pt, fill: rgb(139, 148, 158))[2026-05-24 06:00:00]
+]
+/ 第一行：平台图标 + 仓库名
+  #box(baseline: 2pt)[#text(size: 14pt)[🐙]]
+  #h(6pt)
+  #text(size: 12pt, weight: "bold")[ggerganov/llama.cpp]
+  
+  #v(4pt)
+  
+  // 第二行：分支 + commit hash
+  #text(size: 10pt, fill: rgb(101, 109, 118))[⎇ master]
+  #h(12pt)
+  #text(size: 10pt, fill: rgb(130, 80, 223))[↓ B22FF4B]
+  
+  #v(10pt)
+  
+  // 第三行：作者信息
+  #text(size: 10pt, weight: "medium", fill: rgb(9, 105, 218))[Aldehir Rojas]
+  #text(size: 10pt, fill: rgb(101, 109, 118))[ 提交于 ]
+  #text(size: 10pt)[51分钟前]
+  
+  #v(8pt)
+  
+  // 第四行：Commit 标题（加粗加大）
+  #text(size: 13pt, weight: "bold")[cmake/ui : refactor the build (\#23352)]
+  
+  
+  #v(10pt)
+  
+  // 第五行：文件变化统计
+  #text(size: 10pt, fill: rgb(101, 109, 118))[17 个文件发生了变化，影响行数：]
+  #text(size: 10pt, weight: "bold", fill: rgb(26, 127, 55))[+645]
+  #h(4pt)
+  #text(size: 10pt, weight: "bold", fill: rgb(207, 34, 46))[-439]
+]
+
+#v(24pt)
+
+// 底部信息
+#align(center)[
+  #text(size: 9pt, fill: rgb(139, 148, 158))[generated by koishi-plugin-git-repo-monitor]
+  #v(4pt)
+  #text(size: 8pt, fill: rgb(139, 148, 158))[https://github.com/VincentZyuApps/koishi-plugin-git-repo-monitor]
+  #v(2pt)
+  #text(size: 8pt, fill: rgb(139, 148, 158))[2026-05-24 06:00:00]
 ]
