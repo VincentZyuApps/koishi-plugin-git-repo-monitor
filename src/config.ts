@@ -201,6 +201,8 @@ export interface Config {
   // ========== ⚙️ 基础配置 ==========
   /** 单次推送最大显示提交数 */
   maxCommitsPerPush: number
+  /** selfId 为空时是否只使用第一个匹配 Bot */
+  useFirstBotWhenSelfIdEmpty: boolean
   /** 是否统计行数变化（适用于所有输出模式） */
   showStats: boolean
   /** 是否静默启动 */
@@ -311,6 +313,9 @@ export const Config: Schema<Config> = Schema.intersect([
       .max(50)
       .default(10)
       .description('🔢 单次推送最大显示提交数'),
+    useFirstBotWhenSelfIdEmpty: Schema.boolean()
+      .default(true)
+      .description('🤖 推送目标未指定 selfId 时是否只使用第一个可用 Bot<br/><i>默认开启：按 platform 查找同平台 Bot，逐个尝试并在首个成功后停止；关闭后会对所有匹配 Bot 发送，可能产生重复通知。</i>'),
     showStats: Schema.boolean()
       .default(true)
       .description('📊 是否显示代码行数变化统计（+/-），适用于所有输出模式（文字/图片/转发），可能会增加 API 请求耗时'),

@@ -335,12 +335,27 @@ export class PushScheduler {
     if (bots.length === 0) {
       throw new Error(`未找到平台 ${platform} 的 bot`)
     }
-    
-    // 使用第一个可用的 bot
-    const bot = bots[0]
-    
-    // 发送消息
-    await bot.sendMessage(channelId, messages)
+
+    if (this.config.useFirstBotWhenSelfIdEmpty) {
+      const errors: unknown[] = []
+      for (const bot of bots) {
+        try {
+          await bot.sendMessage(channelId, messages)
+          return
+        } catch (error) {
+          errors.push(error)
+          this.logger.warn(`Bot ${bot.selfId} 发送失败，尝试下一个: ${(error as Error).message}`)
+        }
+      }
+      throw errors[0] || new Error(`平台 ${platform} 的 bot 均发送失败`)
+    }
+
+    const results = await Promise.allSettled(bots.map(bot => bot.sendMessage(channelId, messages)))
+    const successCount = results.filter(result => result.status === 'fulfilled').length
+    if (successCount === 0) {
+      const firstError = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')?.reason
+      throw firstError || new Error(`平台 ${platform} 的 bot 均发送失败`)
+    }
   }
 
   private resolveOutputModes(trigger: 'passive' | 'active'): OutputMode[] {
@@ -387,12 +402,6 @@ export class PushScheduler {
       return
     }
 
-    const bot = bots[0] as any
-    if (!bot.internal?._request) {
-      this.logger.warn('当前 OneBot 适配器不支持 internal._request，发送合并转发失败捏')
-      return
-    }
-
     const groupId = parseInt(channelId, 10)
     if (Number.isNaN(groupId)) {
       this.logger.warn(`无法解析 OneBot 群号: ${channelId}`)
@@ -400,19 +409,41 @@ export class PushScheduler {
     }
 
     const nodes = buildForwardNodes(updates, groupName, this.config)
-    const messages = nodes.map(node => ({
-      type: 'node',
-      data: {
-        name: node.name,
-        uin: String(bot.selfId ?? '0'),
-        content: node.content,
-      },
-    }))
+    const sendWithBot = async (bot: any) => {
+      if (!bot.internal?._request) {
+        throw new Error(`Bot ${bot.selfId} 不支持 internal._request`)
+      }
+      const messages = nodes.map(node => ({
+        type: 'node',
+        data: {
+          name: node.name,
+          uin: String(bot.selfId ?? '0'),
+          content: node.content,
+        },
+      }))
+      await bot.internal._request('send_group_forward_msg', {
+        group_id: groupId,
+        messages,
+      })
+    }
 
-    await bot.internal._request('send_group_forward_msg', {
-      group_id: groupId,
-      messages,
-    })
+    if (this.config.useFirstBotWhenSelfIdEmpty) {
+      for (const bot of bots) {
+        try {
+          await sendWithBot(bot)
+          return
+        } catch (error) {
+          this.logger.warn(`Bot ${bot.selfId} 发送合并转发失败，尝试下一个: ${(error as Error).message}`)
+        }
+      }
+      this.logger.warn('所有 OneBot 均无法发送合并转发')
+      return
+    }
+
+    const results = await Promise.allSettled(bots.map(bot => sendWithBot(bot)))
+    if (results.every(result => result.status === 'rejected')) {
+      this.logger.warn('所有 OneBot 均无法发送合并转发')
+    }
   }
 
   /**

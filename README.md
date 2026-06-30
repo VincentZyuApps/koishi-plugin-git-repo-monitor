@@ -58,6 +58,7 @@
 ### 基础配置
 
 - **maxCommitsPerPush**: 单次推送最大显示提交数（默认 10）
+- **useFirstBotWhenSelfIdEmpty**: 推送目标未指定 selfId 时的 Bot 选择策略（默认 true：同平台 Bot 逐个尝试，首个成功即停止；关闭后对所有同平台 Bot 发送）
 - **showStats**: 是否显示代码行数变化统计（+/-），默认 true
 - **silentStart**: 首次运行是否静默（默认 true，防止首次添加仓库时刷屏）
 - **parallelFetchCount**: 并行获取仓库数量（默认 8，设为 1 则串行）
@@ -75,6 +76,7 @@
   - **platform**: 推送平台（如 `onebot`、`discord` 等）
   - **channelId**: 推送频道 ID
   - **enabled**: 是否启用此推送目标（默认 true）
+  - 当前 `pushTargets` 不配置 `selfId`；同平台多个 Bot 的选择由全局 `useFirstBotWhenSelfIdEmpty` 控制
 - **repos**: 仓库列表
   - **url**: 仓库地址（支持 GitHub、Gitee 等）
   - **branch**: 分支名称（默认 `main`）
