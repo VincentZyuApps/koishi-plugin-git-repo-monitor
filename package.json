@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-git-repo-monitor",
   "description": "监控 Git 仓库变化并推送通知到指定频道，🎨 支持 Typst 和 puppeteer 渲染图片卡片， 📦目前支持Github 和 Gitee",
-  "version": "0.4.0-beta.5+20260703",
+  "version": "0.4.1-beta.6+20260703",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
@@ -42,9 +42,9 @@
     "socks-proxy-agent": "^8.0.5"
   },
   "devDependencies": {
-    "@myriaddreamin/typst-ts-node-compiler": "0.7.0",
-    "koishi-plugin-to-image-service": "0.1.5",
+    "@myriaddreamin/typst-ts-node-compiler": "^0.7.0",
     "@types/node-cron": "^3.0.11",
+    "koishi-plugin-to-image-service": "0.1.5",
     "koishi-plugin-w-node": "2.0.0"
   }
 }

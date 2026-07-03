@@ -118,7 +118,7 @@ export const MonitorGroupSchema = Schema.object({
   name: Schema.string()
     .required() 
     .description('🏷️ 监控组名称（⚠️ 必须唯一，作为系统内部标识符，重名将导致后续同名组被忽略）'),
-  // ↑ name 是核心业务主键：用于 Map 索引、指令查找（git-monitor.check <组名>）、数据库持久化等
+  // ↑ name 是核心业务主键：用于 Map 索引、指令查找、数据库持久化等
   pushTargets: Schema.array(PushTargetSchema)
     /* .required() */
     .default([])
@@ -212,6 +212,26 @@ export interface Config {
   /** 并行获取仓库数量（设为 1 则串行获取） */
   parallelFetchCount: number
 
+  // ========== ⌨️ 指令配置 ==========
+  /** 根指令名称 */
+  commandRoot: string
+  /** 根指令别名 */
+  commandRootAlias: string
+  /** 状态子指令名称 */
+  statusCommand: string
+  /** 检查子指令名称 */
+  checkCommand: string
+  /** 推送子指令名称 */
+  pushCommand: string
+  /** Dry-run 子指令名称 */
+  dryrunCommand: string
+  /** 列表子指令名称 */
+  listCommand: string
+  /** 详情子指令名称 */
+  inspectCommand: string
+  /** 动态发现子指令名称 */
+  discoverCommand: string
+
   // ========== ⏰ 主动消息（定时推送）配置 ==========
   /** 监控组列表 */
   monitorGroups: any[]
@@ -227,7 +247,7 @@ export interface Config {
   discoverGroups: any[]
 
   // ========== 💬 被动消息（指令触发）配置 ==========
-  /** 被动消息输出形式：用户执行 git-monitor.push / dryrun 指令时使用 */
+  /** 被动消息输出形式：用户执行 push / dryrun 子指令时使用 */
   passiveOutputModes: OutputMode[]
   /** 指令触发的回复是否引用原消息 */
   quoteCommandReplies: boolean
@@ -343,6 +363,36 @@ export const Config: Schema<Config> = Schema.intersect([
   }).description('⚙️ 基础配置'),
 
   Schema.object({
+    commandRoot: Schema.string()
+      .default('gm')
+      .description('⌨️ 根指令名称（默认 gm）'),
+    commandRootAlias: Schema.string()
+      .default('git-monitor')
+      .description('🏷️ 根指令别名（默认 git-monitor）'),
+    statusCommand: Schema.string()
+      .default('status')
+      .description('📊 状态子指令名称'),
+    checkCommand: Schema.string()
+      .default('check')
+      .description('🔍 检查子指令名称'),
+    pushCommand: Schema.string()
+      .default('push')
+      .description('📤 被动消息推送子指令名称'),
+    dryrunCommand: Schema.string()
+      .default('dryrun')
+      .description('🧪 Dry-run 子指令名称'),
+    listCommand: Schema.string()
+      .default('list')
+      .description('📋 列表子指令名称'),
+    inspectCommand: Schema.string()
+      .default('inspect')
+      .description('🔎 详情子指令名称'),
+    discoverCommand: Schema.string()
+      .default('discover')
+      .description('🌐 动态发现子指令名称'),
+  }).description('⌨️ 指令配置'),
+
+  Schema.object({
     monitorGroups: Schema.array(MonitorGroupSchema)
       .role('table')
       .default([
@@ -394,7 +444,7 @@ export const Config: Schema<Config> = Schema.intersect([
   Schema.object({
     passiveOutputModes: createOutputModeSchema(['text', 'puppeteer-image', 'typst-image', 'forward'])
       .default(['puppeteer-image', 'forward'])
-      .description('📤 被动消息输出形式：用户执行 git-monitor.push / dryrun 指令时使用（可多选）'),
+      .description('📤 被动消息输出形式：用户执行 push / dryrun 子指令时使用（可多选）'),
     quoteCommandReplies: Schema.boolean()
       .default(true)
       .description('💬 是否引用触发消息发送回复（onebot forward 合并转发 输出不支持引用）'),
@@ -405,14 +455,14 @@ export const Config: Schema<Config> = Schema.intersect([
     ])
       .role('radio')
       .default('both')
-      .description('🎯 git-monitor.push 指令的推送目标选择'),
+      .description('🎯 push 子指令的推送目标选择'),
     defaultPushMode: Schema.union([
       Schema.const('last').description('🔄 last：强制推送所有仓库的最新状态（无论是否有新更新）'),
       Schema.const('new') .description('✨ new：仅推送当前待推送队列中的新增更新，不重新拉取所有仓库'),
     ])
       .role('radio')
       .default('last')
-      .description('🎯 git-monitor.push 指令的默认推送模式（未指定 -m 参数时使用）'),
+      .description('🎯 push 子指令的默认推送模式（未指定 -m 参数时使用）'),
     repoSortOrder: Schema.union([
       Schema.const('time-desc').description('⏱️ 时间降序：commit 时间最晚（最近更新）的排前面【默认】'),
       Schema.const('time-asc').description('⏱️ 时间升序：commit 时间最早（最久远）的排前面'),

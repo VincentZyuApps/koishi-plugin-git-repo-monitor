@@ -82,7 +82,7 @@ ctx.baseDir/data/fonts/LXGWWenKaiMono-Regular.ttf
 本插件按 QQ 官方 Bot 语境区分主动消息和被动消息：
 
 - **主动消息 (`active`)**：Bot 不依赖当前用户指令，按 `pushCron` 定时主动推送待推送队列，使用 `activeOutputModes`。
-- **被动消息 (`passive`)**：用户执行指令触发，例如 `git-monitor.push` / `git-monitor.dryrun`，使用 `passiveOutputModes`。
+- **被动消息 (`passive`)**：用户执行指令触发，例如 `gm.push` / `gm.dryrun`，使用 `passiveOutputModes`。
 - **轮询检查 (`pollCron`)**：只负责检查仓库更新并加入待推送队列，不直接发送消息。
 
 ## 配置说明
@@ -98,6 +98,18 @@ ctx.baseDir/data/fonts/LXGWWenKaiMono-Regular.ttf
 - **repoFetchTimeout**: 单仓库 API 请求超时毫秒数（默认 300000 = 5 分钟）
 - **immediatePollOnStart**: 启动时是否立即执行一次轮询（默认 false）
 
+### 指令配置
+
+- **commandRoot**: 根指令名称（默认 `gm`）。
+- **commandRootAlias**: 根指令别名（默认 `git-monitor`）。
+- **statusCommand**: 状态子指令名称（默认 `status`）。
+- **checkCommand**: 检查子指令名称（默认 `check`）。
+- **pushCommand**: 被动消息推送子指令名称（默认 `push`）。
+- **dryrunCommand**: Dry-run 子指令名称（默认 `dryrun`）。
+- **listCommand**: 列表子指令名称（默认 `list`）。
+- **inspectCommand**: 详情子指令名称（默认 `inspect`）。
+- **discoverCommand**: 动态发现子指令名称（默认 `discover`）。
+
 ### 字体下载配置
 
 - **enableFontDownload**: 是否自动下载默认字体（默认 true）。
@@ -108,8 +120,8 @@ ctx.baseDir/data/fonts/LXGWWenKaiMono-Regular.ttf
 ### 触发与输出模式
 
 - **activeOutputModes**: 主动消息输出形式，Bot 按 `pushCron` 定时主动推送时使用。
-- **passiveOutputModes**: 被动消息输出形式，用户执行 `git-monitor.push` / `git-monitor.dryrun` 指令时使用。
-- **defaultPushMode**: `git-monitor.push` 未指定 `-m` 参数时使用的默认模式。
+- **passiveOutputModes**: 被动消息输出形式，用户执行 `gm.push` / `gm.dryrun` 指令时使用。
+- **defaultPushMode**: `gm.push` 未指定 `-m` 参数时使用的默认模式。
   - `new`: 推送当前待推送队列中的新更新，不重新拉取所有仓库。
   - `last`: 即时拉取所有仓库最新状态，并作为被动消息发送。
 
@@ -137,6 +149,8 @@ ctx.baseDir/data/fonts/LXGWWenKaiMono-Regular.ttf
 ```yaml
 plugins:
   git-repo-monitor:
+    commandRoot: gm
+    commandRootAlias: git-monitor
     enableFontDownload: true
     fontPath: ./data/fonts/LXGWWenKaiMono-Regular.ttf
     typstFontPath: ''
@@ -167,15 +181,18 @@ plugins:
 
 ## 命令
 
+默认根指令是 `gm`，`git-monitor` 是根指令别名。直接输入 `gm` / `git-monitor` 会进入 Koishi 的根指令帮助；监控状态请使用 `gm.status`。
+
 | 指令 | 说明 | 示例 |
 |------|------|------|
-| `git-monitor` | 查看监控状态 | `git-monitor` |
-| `git-monitor.check <组名>` | 指令触发检查<br>发现的新更新会加入待推送队列，不会立即发送 | `git-monitor.check qwq` |
-| `git-monitor.discover <urls> [-n name] [--no-sync]` | 从 GitHub/Gitee 用户或组织创建动态监控组<br>• `-n <名称>`: 指定组名<br>• `--no-sync`: 创建后不同步仓库列表 | `git-monitor.discover https://github.com/owner1`<br>`git-monitor.discover https://github.com/owner1 -n my-group` |
-| `git-monitor.dryrun [-n count]` | 使用硬编码假数据测试被动消息推送与渲染<br>• `-n <数量>`: 指定仓库数量 (1-30)<br>• 默认 15 个仓库 | `git-monitor.dryrun`<br>`git-monitor.dryrun -n 20` |
-| `git-monitor.inspect <组名> [-p page] [-l limit] [-s sort] [-v]` | 查看监控组仓库详情<br>• `-p <页码>`: 页码 (默认1)<br>• `-l <数量>`: 每页条数 (默认10)<br>• `-s <方式>`: time-desc(默认)/time-asc/alpha-asc/alpha-desc<br>• `-v`: 显示最新 commit 详情 | `git-monitor.inspect qwq`<br>`git-monitor.inspect qwq -p 2 -l 20 -s alpha-asc` |
-| `git-monitor.list [--verbose]` | 列出所有监控组概要<br>• `--verbose`: 显示全部仓库详情（⚠️可能超限） | `git-monitor.list`<br>`git-monitor.list --verbose` |
-| `git-monitor.push <组名> [-m mode]` | 触发一次被动消息推送<br>• 未指定 `-m` 时使用 `defaultPushMode`（默认 `last`）<br>• `-m new`: 发送当前待推送队列，不重新拉取所有仓库<br>• `-m last`: 即时拉取所有仓库最新状态并发送 | `git-monitor.push qwq`<br>`git-monitor.push qwq -m last` |
+| `gm` | 根指令帮助（别名：`git-monitor`） | `gm`<br>`git-monitor` |
+| `gm.status` | 查看 Git 仓库监控状态 | `gm.status` |
+| `gm.check <组名>` | 指令触发检查<br>发现的新更新会加入待推送队列，不会立即发送 | `gm.check qwq` |
+| `gm.discover <urls> [-n name] [--no-sync]` | 从 GitHub/Gitee 用户或组织创建动态监控组<br>• `-n <名称>`: 指定组名<br>• `--no-sync`: 创建后不同步仓库列表 | `gm.discover https://github.com/owner1`<br>`gm.discover https://github.com/owner1 -n my-group` |
+| `gm.dryrun [-n count]` | 使用硬编码假数据测试被动消息推送与渲染<br>• `-n <数量>`: 指定仓库数量 (1-30)<br>• 默认 15 个仓库 | `gm.dryrun`<br>`gm.dryrun -n 20` |
+| `gm.inspect <组名> [-p page] [-l limit] [-s sort] [-v]` | 查看监控组仓库详情<br>• `-p <页码>`: 页码 (默认1)<br>• `-l <数量>`: 每页条数 (默认10)<br>• `-s <方式>`: time-desc(默认)/time-asc/alpha-asc/alpha-desc<br>• `-v`: 显示最新 commit 详情 | `gm.inspect qwq`<br>`gm.inspect qwq -p 2 -l 20 -s alpha-asc` |
+| `gm.list [--verbose]` | 列出所有监控组概要<br>• `--verbose`: 显示全部仓库详情（⚠️可能超限） | `gm.list`<br>`gm.list --verbose` |
+| `gm.push <组名> [-m mode]` | 触发一次被动消息推送<br>• 未指定 `-m` 时使用 `defaultPushMode`（默认 `last`）<br>• `-m new`: 发送当前待推送队列，不重新拉取所有仓库<br>• `-m last`: 即时拉取所有仓库最新状态并发送 | `gm.push qwq`<br>`gm.push qwq -m last` |
 
 ## Cron 表达式
 

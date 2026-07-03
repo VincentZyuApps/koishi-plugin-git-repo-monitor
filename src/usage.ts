@@ -38,7 +38,9 @@ export const usage = `
 
 <p><b>🔡 字体下载：</b>默认开启 <code>enableFontDownload</code>，插件会把 <code>LXGWWenKaiMono-Regular.ttf</code> 下载到 <code>ctx.baseDir/data/fonts</code>。下载顺序为 Gitee release 优先，失败后 fallback 到 GitHub release；下载完成后校验 <code>size + md5 + sha1 + sha256 + sha512</code>。配置页里的默认 <code>fontPath</code> 展示为 <code>process.cwd()/data/fonts/LXGWWenKaiMono-Regular.ttf</code>，运行时会自动映射到 <code>ctx.baseDir/data/fonts/LXGWWenKaiMono-Regular.ttf</code>。</p>
 
-<p><b>💬 主动消息与被动消息：</b>本插件按 QQ 官方 Bot 语境区分：<code>active</code> 是 Bot 不依赖当前用户指令、按 <code>pushCron</code> 定时发送的主动消息，使用 <code>activeOutputModes</code>；<code>passive</code> 是用户执行 <code>git-monitor.push</code> / <code>git-monitor.dryrun</code> 指令触发的被动消息，使用 <code>passiveOutputModes</code>。<code>pollCron</code> 只负责检查仓库更新并加入待推送队列，不直接发送消息。</p>
+<p><b>💬 主动消息与被动消息：</b>本插件按 QQ 官方 Bot 语境区分：<code>active</code> 是 Bot 不依赖当前用户指令、按 <code>pushCron</code> 定时发送的主动消息，使用 <code>activeOutputModes</code>；<code>passive</code> 是用户执行 <code>gm.push</code> / <code>gm.dryrun</code> 指令触发的被动消息，使用 <code>passiveOutputModes</code>。<code>pollCron</code> 只负责检查仓库更新并加入待推送队列，不直接发送消息。</p>
+
+<p><b>⌨️ 指令配置：</b>默认根指令是 <code>gm</code>，<code>git-monitor</code> 是根指令别名。直接输入 <code>gm</code> / <code>git-monitor</code> 会进入 Koishi 的根指令帮助；监控状态请使用 <code>gm.status</code>。</p>
 
 ### 🔧 命令列表
 
@@ -48,51 +50,56 @@ export const usage = `
 </thead>
 <tbody>
 <tr>
-  <td><code>git-monitor</code></td>
-  <td>查看监控状态</td>
-  <td><code>git-monitor</code></td>
+  <td><code>gm</code></td>
+  <td>根指令帮助（别名：<code>git-monitor</code>）</td>
+  <td><code>gm</code><br><code>git-monitor</code></td>
 </tr>
 <tr>
-  <td><code>git-monitor.check &lt;组名&gt;</code></td>
+  <td><code>gm.status</code></td>
+  <td>查看 Git 仓库监控状态</td>
+  <td><code>gm.status</code></td>
+</tr>
+<tr>
+  <td><code>gm.check &lt;组名&gt;</code></td>
   <td>指令触发检查<br>发现的新更新会加入待推送队列，不会立即发送</td>
-  <td><code>git-monitor.check qwq</code></td>
+  <td><code>gm.check qwq</code></td>
 </tr>
 <tr>
-  <td><code>git-monitor.discover &lt;urls&gt; [-n name] [--no-sync]</code></td>
+  <td><code>gm.discover &lt;urls&gt; [-n name] [--no-sync]</code></td>
   <td>从 GitHub/Gitee 用户或组织创建动态监控组<br>
   • <code>-n &lt;名称&gt;</code>: 指定组名<br>
   • <code>--no-sync</code>: 创建后不同步仓库列表</td>
-  <td><code>git-monitor.discover https://github.com/owner1</code><br><code>git-monitor.discover https://github.com/owner1 -n my-group</code></td>
+  <td><code>gm.discover https://github.com/owner1</code><br><code>gm.discover https://github.com/owner1 -n my-group</code></td>
 </tr>
 <tr>
-  <td><code>git-monitor.dryrun [-n count]</code></td>
+  <td><code>gm.dryrun [-n count]</code></td>
   <td>使用硬编码假数据测试被动消息推送与渲染<br>
   • <code>-n &lt;数量&gt;</code>: 指定仓库数量 (1-30)<br>
   • 默认 15 个仓库</td>
-  <td><code>git-monitor.dryrun</code><br><code>git-monitor.dryrun -n 20</code></td>
+  <td><code>gm.dryrun</code><br><code>gm.dryrun -n 20</code></td>
 </tr>
 <tr>
-  <td><code>git-monitor.inspect &lt;组名&gt; [-p page] [-l limit] [-s sort] [-v]</code></td>
+  <td><code>gm.inspect &lt;组名&gt; [-p page] [-l limit] [-s sort] [-v]</code></td>
   <td>查看监控组仓库详情<br>
   • <code>-p &lt;页码&gt;</code>: 页码 (默认1)<br>
   • <code>-l &lt;数量&gt;</code>: 每页条数 (默认10)<br>
   • <code>-s &lt;方式&gt;</code>: time-desc(默认)/time-asc/alpha-asc/alpha-desc<br>
   • <code>-v</code>: 显示最新 commit 详情</td>
-  <td><code>git-monitor.inspect qwq</code><br><code>git-monitor.inspect qwq -p 2 -l 20 -s alpha-asc</code></td>
+  <td><code>gm.inspect qwq</code><br><code>gm.inspect qwq -p 2 -l 20 -s alpha-asc</code></td>
 </tr>
 <tr>
-  <td><code>git-monitor.list [--verbose]</code></td>
+  <td><code>gm.list [--verbose]</code></td>
   <td>列出所有监控组概要<br>
   • <code>--verbose</code>: 显示全部仓库详情（⚠️可能超限）</td>
-  <td><code>git-monitor.list</code><br><code>git-monitor.list --verbose</code></td>
+  <td><code>gm.list</code><br><code>gm.list --verbose</code></td>
 </tr>
 <tr>
-  <td><code>git-monitor.push &lt;组名&gt; [-m mode]</code></td>
+  <td><code>gm.push &lt;组名&gt; [-m mode]</code></td>
   <td>触发一次被动消息推送<br>
   • 未指定 <code>-m</code> 时使用 <code>defaultPushMode</code>（默认 <code>last</code>）<br>
   • <code>-m new</code>: 发送当前待推送队列，不重新拉取所有仓库<br>
   • <code>-m last</code>: 即时拉取所有仓库最新状态并发送</td>
-  <td><code>git-monitor.push qwq</code><br><code>git-monitor.push qwq -m last</code></td>
+  <td><code>gm.push qwq</code><br><code>gm.push qwq -m last</code></td>
 </tr>
 </tbody>
 </table>

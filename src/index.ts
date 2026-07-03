@@ -111,6 +111,20 @@ export function apply(ctx: Context, config: Config) {
     }
   }
 
+  const commandName = (value: string | undefined, fallback: string) => {
+    return value?.trim() || fallback
+  }
+  const commandRoot = commandName(config.commandRoot, 'gm')
+  const commandRootAlias = commandName(config.commandRootAlias, 'git-monitor')
+  const statusCommand = commandName(config.statusCommand, 'status')
+  const checkCommand = commandName(config.checkCommand, 'check')
+  const pushCommand = commandName(config.pushCommand, 'push')
+  const dryrunCommand = commandName(config.dryrunCommand, 'dryrun')
+  const listCommand = commandName(config.listCommand, 'list')
+  const inspectCommand = commandName(config.inspectCommand, 'inspect')
+  const discoverCommand = commandName(config.discoverCommand, 'discover')
+  const commandPath = (subCommand: string) => `${commandRoot}.${subCommand}`
+
   // ============ 加载字体并初始化 Typst ============
   ctx.on('ready', async () => {
     await ensureDefaultFont(ctx, config.enableFontDownload, config.verboseConsoleLog)
@@ -170,7 +184,12 @@ export function apply(ctx: Context, config: Config) {
   })
 
   // ============ 注册命令 ============
-  ctx.command('git-monitor', 'Git 仓库监控')
+  const rootCommand = ctx.command(commandRoot, 'Git 仓库监控')
+  if (commandRootAlias && commandRootAlias !== commandRoot) {
+    rootCommand.alias(commandRootAlias)
+  }
+
+  ctx.command(commandPath(statusCommand), '查看 Git 仓库监控状态')
     .action(({ session }) => {
       const pollStatus = pollScheduler.getStatus()
       const pushStatus = pushScheduler.getStatus()
@@ -193,7 +212,7 @@ export function apply(ctx: Context, config: Config) {
       return formatCommandReply(session, lines.join('\n'))
     })
 
-  ctx.command('git-monitor.check <group:string>', '指令触发检查，发现的新更新加入待推送队列')
+  ctx.command(`${commandPath(checkCommand)} <group:string>`, '指令触发检查，发现的新更新加入待推送队列')
     .action(async ({ session }, group) => {
       if (!group) {
         return formatCommandReply(session, '请指定监控组名称')
@@ -214,7 +233,7 @@ export function apply(ctx: Context, config: Config) {
       }
     })
 
-  ctx.command('git-monitor.push <group:string>', '触发一次被动消息推送')
+  ctx.command(`${commandPath(pushCommand)} <group:string>`, '触发一次被动消息推送')
     .option('mode', '-m <mode:string> 被动消息推送模式：last (最新状态) 或 new (待推送队列)')
     .action(async ({ session, options }, group) => {
       if (!group) {
@@ -240,7 +259,7 @@ export function apply(ctx: Context, config: Config) {
       }
     })
 
-  ctx.command('git-monitor.dryrun', '使用硬编码假数据测试被动消息推送和渲染')
+  ctx.command(commandPath(dryrunCommand), '使用硬编码假数据测试被动消息推送和渲染')
     .option('count', '-n <count:number> 假数据仓库数量（1-30）', { fallback: 15 })
     .action(async ({ session, options }) => {
       const rawCount = typeof options?.count === 'number' ? options.count : Number(options?.count)
@@ -260,7 +279,7 @@ export function apply(ctx: Context, config: Config) {
       }
     })
 
-  ctx.command('git-monitor.list', '列出所有监控仓库（不建议使用--verbose参数，可能超出平台消息长度限制）')
+  ctx.command(commandPath(listCommand), '列出所有监控仓库（不建议使用--verbose参数，可能超出平台消息长度限制）')
     .option('verbose', '--verbose 显示完整仓库列表')
     .action(({ session, options }) => {
       if (!config.monitorGroups || config.monitorGroups.length === 0) {
@@ -292,7 +311,7 @@ export function apply(ctx: Context, config: Config) {
       return formatCommandReply(session, lines.join('\n'))
     })
 
-  ctx.command('git-monitor.inspect <group:string>', '查看监控组仓库详细信息')
+  ctx.command(`${commandPath(inspectCommand)} <group:string>`, '查看监控组仓库详细信息')
     .option('page', '-p <page:number> 页码', { fallback: 1 })
     .option('limit', '-l <limit:number> 每页显示数量', { fallback: 10 })
     .option('sort', '-s <sort:string> 排序方式：time-desc(默认)/time-asc/alpha-asc/alpha-desc')
@@ -382,11 +401,11 @@ export function apply(ctx: Context, config: Config) {
       return formatCommandReply(session, lines.join('\n'))
     })
 
-  ctx.command('git-monitor.discover <urls:text>', '从 GitHub/Gitee 用户或组织创建动态监控组')
+  ctx.command(`${commandPath(discoverCommand)} <urls:text>`, '从 GitHub/Gitee 用户或组织创建动态监控组')
     .option('name', '-n <name> 指定监控组名称（默认自动生成）')
     .option('no-sync', '--no-sync 创建后不同步仓库列表（下次轮询自动同步）')
     .usage('传入一个或多个 GitHub/Gitee 个人主页或组织主页 URL，用空格隔开\n'
-      + '示例：git-monitor.discover https://github.com/owner1 https://gitee.com/owner2')
+      + `示例：${commandPath(discoverCommand)} https://github.com/owner1 https://gitee.com/owner2`)
     .action(async ({ session, options }, urls) => {
       if (!urls) {
         return formatCommandReply(session, '请提供至少一个 GitHub/Gitee 用户或组织 URL')
@@ -461,8 +480,8 @@ export function apply(ctx: Context, config: Config) {
         + `\n└─ 🌐 来源: ${sourceSummary}`
         + (syncMsg ? `\n└─ 📦 ${syncMsg.replace(/^[\s\n]*/, '')}` : '')
         + `\n\n使用:`
-        + `\n  🚀 \`git-monitor.push ${groupName} -m last\`  → 立即触发被动消息推送查看效果`
-        + `\n  📋 \`git-monitor.discover ... --no-sync\`  → 仅创建，不同步`)
+        + `\n  🚀 \`${commandPath(pushCommand)} ${groupName} -m last\`  → 立即触发被动消息推送查看效果`
+        + `\n  📋 \`${commandPath(discoverCommand)} ... --no-sync\`  → 仅创建，不同步`)
     })
 
   // ============ 清理任务 ============
