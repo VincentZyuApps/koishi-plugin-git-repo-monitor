@@ -68,11 +68,11 @@ export class StorageManager {
   }
 
   /**
-   * 获取待推送任务
+   * 获取待推送队列任务
    * @param _groupName - 监控组名称（保留用于未来扩展）
    */
   async getPendingTasks(_groupName: string): Promise<any[]> {
-    // 这里可以实现更复杂的任务队列逻辑
+    // 这里可以实现更复杂的待推送队列逻辑
     // 简单起见，暂时返回空数组
     return []
   }

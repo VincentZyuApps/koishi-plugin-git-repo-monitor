@@ -4,13 +4,14 @@ import * as path from 'path'
 import { Config, OutputMode } from '../config'
 import { MonitorGroup, RepoUpdate, GitCommit, GitRelease, RepoConfig } from '../types'
 import { PollScheduler } from './poller'
-import { TypstRenderer } from '../services/renderer-typst'
+import { TypstRenderer } from '../render/typst'
 import { StorageManager } from '../utils/storage'
-import { writeRepoUpdatesToJson } from '../utils/file-logger'
+import { writeRepoUpdatesToJson } from '../utils/file'
 import { RepoDiscoverer } from '../services/discover'
-import { renderTextSummary } from '../services/render-text'
-import { renderPuppeteerImage } from '../services/render-puppeteer'
-import { buildForwardNodes } from '../services/render-forward'
+import { renderTextSummary } from '../render/text'
+import { renderPuppeteerImage } from '../render/puppeteer'
+import { buildForwardNodes } from '../render/forward'
+import { createConsoleLogger } from '../utils/logger'
 
 const MOCK_COMMIT_SUBJECTS = [
   '【测试提交 1】极短占位：修复演示 Bug。',
@@ -36,7 +37,7 @@ const HARD_CODED_REPOS: Array<{ displayName: string; owner: string; config: Repo
 ]
 
 /**
- * 推送任务
+ * 主动消息推送任务
  */
 interface PushJob {
   group: MonitorGroup
@@ -55,12 +56,16 @@ interface PushOptions {
   sessionChannel?: { platform: string; channelId: string }
 }
 
+// active: Bot 主动消息，按 pushCron 定时触发；passive: Bot 被动消息，由用户指令触发。
+type PushTrigger = 'active' | 'passive'
+
 /**
- * 推送调度器
+ * 主动/被动消息推送调度器
  */
 export class PushScheduler {
   private jobs: Map<string, PushJob> = new Map()
   private logger: Logger
+  private log: ReturnType<typeof createConsoleLogger>
   
   constructor(
     private ctx: Context,
@@ -70,11 +75,12 @@ export class PushScheduler {
     private config: Config,
     private discoverer?: RepoDiscoverer,
   ) {
-    this.logger = ctx.logger('git-monitor:push')
+    this.logger = ctx.logger('git-monitor:📤push')
+    this.log = createConsoleLogger(this.logger, () => this.config.verboseConsoleLog)
   }
 
   /**
-   * 启动监控组的推送任务
+   * 启动监控组的主动消息推送任务
    */
   start(group: MonitorGroup): void {
     if (!group.enabled) {
@@ -84,10 +90,10 @@ export class PushScheduler {
     // 如果已存在任务，先停止
     this.stop(group.name)
     
-    this.logger.info(`启动监控组 ${group.name} 的推送任务，Cron: ${group.pushCron}`)
+    this.logger.info(`🚀 启动监控组 ${group.name} 的主动消息推送任务，Cron: ${group.pushCron}`)
     
     const job = cron.schedule(group.pushCron, async () => {
-      await this.pushUpdates(group, 'passive')
+      await this.pushUpdates(group, 'active')
     })
     
     this.jobs.set(group.name, {
@@ -97,19 +103,19 @@ export class PushScheduler {
   }
 
   /**
-   * 停止监控组的推送任务
+   * 停止监控组的主动消息推送任务
    */
   stop(groupName: string): void {
     const job = this.jobs.get(groupName)
     if (job) {
       job.job.stop()
       this.jobs.delete(groupName)
-      this.logger.info(`停止监控组 ${groupName} 的推送任务`)
+      this.logger.info(`🛑 停止监控组 ${groupName} 的主动消息推送任务`)
     }
   }
 
   /**
-   * 停止所有推送任务
+   * 停止所有主动消息推送任务
    */
   stopAll(): void {
     for (const [name] of this.jobs) {
@@ -118,27 +124,27 @@ export class PushScheduler {
   }
 
   /**
-   * 推送更新
+   * 推送更新消息
    */
   private async pushUpdates(
     group: MonitorGroup,
-    trigger: 'passive' | 'active',
+    trigger: PushTrigger,
     specificUpdates?: RepoUpdate[],
     options: PushOptions = {},
   ): Promise<void> {
     const { dryRun = false, quoteContext } = options
-    this.logger.debug(`执行推送任务: ${group.name}`)
+    this.log.debug(`📤 执行${trigger === 'active' ? '主动消息' : '被动消息'}推送: ${group.name}`)
     
     // 获取待推送的更新
     const updates = specificUpdates || this.pollScheduler.getPendingUpdates(group.name)
     
     if (updates.length === 0) {
-      this.logger.debug(`${dryRun ? 'Dry-run 没有可推送的假数据' : '没有待推送的更新'}: ${group.name}`)
+      this.log.debug(`📭 ${dryRun ? 'Dry-run 没有可推送的假数据' : '没有待推送的更新'}: ${group.name}`)
       return
     }
     
     if (dryRun) {
-      this.logger.info(`Dry-run: 使用 ${updates.length} 条假数据推送 ${group.name}`)
+      this.logger.info(`🧪 Dry-run: 使用 ${updates.length} 条假数据触发被动消息推送 ${group.name}`)
     }
 
     // 如果是动态发现组，先同步仓库列表
@@ -155,8 +161,8 @@ export class PushScheduler {
     // 获取启用的推送目标
     let enabledTargets = group.pushTargets.filter(target => target.enabled !== false)
     
-    // 根据配置决定推送目标（仅对主动触发生效）
-    if (trigger === 'active' && options.sessionChannel) {
+    // 根据配置决定推送目标（仅对被动消息/指令触发生效）
+    if (trigger === 'passive' && options.sessionChannel) {
       const pushTargetMode = this.config.pushCommandTarget || 'both'
       
       if (pushTargetMode === 'current') {
@@ -168,7 +174,7 @@ export class PushScheduler {
           channelId: currentChannel.channelId,
           enabled: true
         }]
-        this.logger.info(`推送目标模式: current，仅推送到当前频道 ${currentChannel.platform}:${currentChannel.channelId}`)
+        this.log.debug(`🎯 推送目标模式: current，仅推送到当前频道 ${currentChannel.platform}:${currentChannel.channelId}`)
       } else if (pushTargetMode === 'both') {
         // 同时推送到配置目标和当前频道
         const currentChannel = options.sessionChannel
@@ -183,22 +189,22 @@ export class PushScheduler {
             channelId: currentChannel.channelId,
             enabled: true
           })
-          this.logger.info(`推送目标模式: both，推送到配置目标和当前频道 ${currentChannel.platform}:${currentChannel.channelId}`)
+          this.log.debug(`🎯 推送目标模式: both，推送到配置目标和当前频道 ${currentChannel.platform}:${currentChannel.channelId}`)
         } else {
-          this.logger.info(`推送目标模式: both，当前频道已在配置目标中`)
+          this.log.debug(`🎯 推送目标模式: both，当前频道已在配置目标中`)
         }
       } else {
         // configured：仅推送到配置的推送目标
-        this.logger.info(`推送目标模式: configured，仅推送到配置目标`)
+        this.log.debug(`🎯 推送目标模式: configured，仅推送到配置目标`)
       }
     }
     
     if (enabledTargets.length === 0) {
-      this.logger.warn(`监控组 ${group.name} 没有启用的推送目标`)
+      this.logger.warn(`⚠️ 监控组 ${group.name} 没有启用的推送目标`)
       return
     }
     
-    this.logger.info(`准备推送 ${updates.length} 个更新到 ${enabledTargets.length} 个目标`)
+    this.logger.info(`📤 准备推送 ${updates.length} 个更新到 ${enabledTargets.length} 个目标`)
 
     // 按配置排序
     const sortedUpdates = [...updates].sort((a, b) => {
@@ -210,89 +216,89 @@ export class PushScheduler {
         default: return b.updateTime.getTime() - a.updateTime.getTime()
       }
     })
-    this.logger.debug(`排序方式: ${this.config.repoSortOrder || 'time-desc'}`)
+    this.log.debug(`📊 排序方式: ${this.config.repoSortOrder || 'time-desc'}`)
 
     try {
       const modes = this.resolveOutputModes(trigger)
-      this.logger.info(`解析输出模式: ${JSON.stringify({ trigger, selected: trigger === 'active' ? this.config.activeOutputModes : this.config.passiveOutputModes, resolved: modes })}`)
+      this.log.debug(`🧭 解析输出模式: ${JSON.stringify({ trigger, selected: trigger === 'active' ? this.config.activeOutputModes : this.config.passiveOutputModes, resolved: modes })}`)
 
       // 构建消息组（图片分开发送）
       const messageGroups: h[][] = []
 
-      this.logger.info(`开始构建消息，更新数: ${sortedUpdates.length}, 输出模式: ${modes.join(', ')}`)
+      this.log.debug(`🧱 开始构建消息，更新数: ${sortedUpdates.length}, 输出模式: ${modes.join(', ')}`)
 
       // 文字消息（如果有）
       if (modes.includes('text')) {
         const summary = renderTextSummary(sortedUpdates, group.name, this.config)
         messageGroups.push([h.text(summary)])
-        this.logger.info(`添加文字消息，长度: ${summary.length}`)
+        this.log.debug(`📝 添加文字消息，长度: ${summary.length}`)
       }
 
       // Typst 图片（单独一条消息）
       if (modes.includes('typst-image')) {
         try {
-          this.logger.info(`开始渲染 Typst 图片，更新数: ${sortedUpdates.length}`)
+          this.log.debug(`🧩 开始渲染 Typst 图片，更新数: ${sortedUpdates.length}`)
           const image = await this.renderer.renderBatchUpdates(sortedUpdates, group.name)
           if (image) {
             messageGroups.push([h.image(image, 'image/png')])
-            this.logger.info(`Typst 图片渲染成功，大小: ${image.length} bytes`)
+            this.logger.info(`✅ Typst 图片渲染成功，大小: ${image.length} bytes`)
           } else {
-            this.logger.warn(`Typst 图片渲染返回 null，跳过此输出`)
+            this.logger.warn(`⚠️ Typst 图片渲染返回 null，跳过此输出`)
           }
         } catch (error) {
-          this.logger.error(`Typst 渲染异常: ${(error as Error).message}`)
+          this.logger.error(`❌ Typst 渲染异常: ${(error as Error).message}`)
         }
       }
 
       // Puppeteer 图片（单独一条消息）
       if (modes.includes('puppeteer-image')) {
         try {
-          this.logger.info(`开始渲染 Puppeteer 图片，更新数: ${sortedUpdates.length}`)
+          this.log.debug(`🖼️ 开始渲染 Puppeteer 图片，更新数: ${sortedUpdates.length}`)
           const image = await renderPuppeteerImage(this.ctx, this.config, sortedUpdates, group.name)
           if (image) {
             messageGroups.push([h.image(image, 'image/png')])
-            this.logger.info(`Puppeteer 图片渲染成功，大小: ${image.length} bytes`)
+            this.logger.info(`✅ Puppeteer 图片渲染成功，大小: ${image.length} bytes`)
           } else {
-            this.logger.warn(`Puppeteer 图片渲染返回 null，跳过此输出`)
+            this.logger.warn(`⚠️ Puppeteer 图片渲染返回 null，跳过此输出`)
           }
         } catch (error) {
-          this.logger.error(`Puppeteer 渲染异常: ${(error as Error).message}`)
+          this.logger.error(`❌ Puppeteer 渲染异常: ${(error as Error).message}`)
         }
       }
 
-      this.logger.info(`消息组构建完成，数量: ${messageGroups.length}`)
+      this.log.debug(`📦 消息组构建完成，数量: ${messageGroups.length}`)
 
       // 推送到所有启用的目标
       for (const target of enabledTargets) {
         const shouldQuoteTarget =
-          trigger === 'active'
+          trigger === 'passive'
           && quoteContext
           && quoteContext.platform === target.platform
           && quoteContext.channelId === target.channelId
 
         try {
-          this.logger.info(`推送到 ${target.name} (${target.platform}:${target.channelId})`)
+          this.logger.info(`📨 推送到 ${target.name} (${target.platform}:${target.channelId})`)
           
           // 发送合并转发（仅支持 OneBot）
           if (modes.includes('forward')) {
             try {
               await this.sendForwardMessage(target.platform, target.channelId, sortedUpdates, group.name)
             } catch (error) {
-              this.logger.error(`合并转发异常: ${(error as Error).message}`)
+              this.logger.error(`❌ 合并转发异常: ${(error as Error).message}`)
             }
           }
 
           // 发送普通消息（图片分开发送）
           if (messageGroups.length > 0) {
             for (const messages of messageGroups) {
-              // 如果是主动触发且开启了引用，每条消息都引用原消息
+              // 如果是被动消息且开启了引用，每条消息都引用触发指令的原消息
               const outboundMessages = shouldQuoteTarget && quoteContext
                 ? [h.quote(quoteContext.messageId), ...messages]
                 : messages
               await this.sendMessage(target.platform, target.channelId, outboundMessages)
             }
           } else if (!modes.includes('forward')) {
-            this.logger.warn(`无可发送的消息内容: ${group.name}`)
+            this.logger.warn(`⚠️ 无可发送的消息内容: ${group.name}`)
           }
           
           // 保存推送记录
@@ -311,17 +317,17 @@ export class PushScheduler {
               )
             }
           } else {
-            this.logger.debug('Dry-run: 跳过推送记录持久化')
+            this.log.debug('🧪 Dry-run: 跳过推送记录持久化')
           }
           
-          this.logger.info(`推送成功: ${target.name}`)
+          this.logger.info(`✅ 推送成功: ${target.name}`)
         } catch (error) {
-          this.logger.error(`推送失败 ${target.name}:`, error)
+          this.logger.error(`❌ 推送失败 ${target.name}:`, error)
         }
       }
       
     } catch (error) {
-      this.logger.error(`推送失败 ${group.name}:`, error)
+      this.logger.error(`❌ 推送失败 ${group.name}:`, error)
     }
   }
 
@@ -344,7 +350,7 @@ export class PushScheduler {
           return
         } catch (error) {
           errors.push(error)
-          this.logger.warn(`Bot ${bot.selfId} 发送失败，尝试下一个: ${(error as Error).message}`)
+          this.logger.warn(`⚠️ Bot ${bot.selfId} 发送失败，尝试下一个: ${(error as Error).message}`)
         }
       }
       throw errors[0] || new Error(`平台 ${platform} 的 bot 均发送失败`)
@@ -358,7 +364,7 @@ export class PushScheduler {
     }
   }
 
-  private resolveOutputModes(trigger: 'passive' | 'active'): OutputMode[] {
+  private resolveOutputModes(trigger: PushTrigger): OutputMode[] {
     const selected = trigger === 'active' ? this.config.activeOutputModes : this.config.passiveOutputModes
     const modes: OutputMode[] = []
 
@@ -366,7 +372,7 @@ export class PushScheduler {
 
     if (selected.includes('typst-image')) {
       if (!this.ctx.toImageService || !this.ctx.node) {
-        this.logger.warn('未启用 to-image-service 或 w-node，无法使用 Typst 图片渲染')
+        this.logger.warn('⚠️ 未启用 to-image-service 或 w-node，无法使用 Typst 图片渲染')
       } else {
         modes.push('typst-image')
       }
@@ -374,7 +380,7 @@ export class PushScheduler {
 
     if (selected.includes('puppeteer-image')) {
       if (!this.ctx.puppeteer) {
-        this.logger.warn('未启用 puppeteer，无法使用 Puppeteer 图片渲染')
+        this.logger.warn('⚠️ 未启用 puppeteer，无法使用 Puppeteer 图片渲染')
       } else {
         modes.push('puppeteer-image')
       }
@@ -383,7 +389,7 @@ export class PushScheduler {
     if (selected.includes('forward')) modes.push('forward')
 
     if (modes.length === 0) {
-      this.logger.warn('未配置可用的输出形式，自动回退为文字消息')
+      this.logger.warn('⚠️ 未配置可用的输出形式，自动回退为文字消息')
       return ['text']
     }
 
@@ -392,19 +398,19 @@ export class PushScheduler {
 
   private async sendForwardMessage(platform: string, channelId: string, updates: RepoUpdate[], groupName: string): Promise<void> {
     if (platform !== 'onebot') {
-      this.logger.warn(`合并转发仅支持 OneBot，已跳过平台 ${platform}`)
+      this.logger.warn(`⚠️ 合并转发仅支持 OneBot，已跳过平台 ${platform}`)
       return
     }
 
     const bots = this.ctx.bots.filter(bot => bot.platform === platform)
     if (bots.length === 0) {
-      this.logger.warn('未找到 OneBot 平台，无法发送合并转发')
+      this.logger.warn('⚠️ 未找到 OneBot 平台，无法发送合并转发')
       return
     }
 
     const groupId = parseInt(channelId, 10)
     if (Number.isNaN(groupId)) {
-      this.logger.warn(`无法解析 OneBot 群号: ${channelId}`)
+      this.logger.warn(`⚠️ 无法解析 OneBot 群号: ${channelId}`)
       return
     }
 
@@ -433,21 +439,21 @@ export class PushScheduler {
           await sendWithBot(bot)
           return
         } catch (error) {
-          this.logger.warn(`Bot ${bot.selfId} 发送合并转发失败，尝试下一个: ${(error as Error).message}`)
+          this.logger.warn(`⚠️ Bot ${bot.selfId} 发送合并转发失败，尝试下一个: ${(error as Error).message}`)
         }
       }
-      this.logger.warn('所有 OneBot 均无法发送合并转发')
+      this.logger.warn('⚠️ 所有 OneBot 均无法发送合并转发')
       return
     }
 
     const results = await Promise.allSettled(bots.map(bot => sendWithBot(bot)))
     if (results.every(result => result.status === 'rejected')) {
-      this.logger.warn('所有 OneBot 均无法发送合并转发')
+      this.logger.warn('⚠️ 所有 OneBot 均无法发送合并转发')
     }
   }
 
   /**
-   * 手动触发推送
+   * 指令触发被动消息推送
    */
   async triggerPush(groupName: string, mode: 'new' | 'last' = 'new', options: PushOptions = {}): Promise<void> {
     const job = this.jobs.get(groupName)
@@ -456,12 +462,12 @@ export class PushScheduler {
     }
     
     if (mode === 'last') {
-      this.logger.info(`last 模式: 获取 ${job.group.name} 的所有仓库最新状态`)
-      const updates = await this.pollScheduler.fetchLatestUpdates(job.group, this.ctx.logger('git-monitor:指令触发:push'))
-      this.logger.info(`last 模式: 获取到 ${updates.length} 个更新`)
-      await this.pushUpdates(job.group, 'active', updates, options)
+      this.logger.info(`🔄 被动消息 last 模式: 获取 ${job.group.name} 的所有仓库最新状态`)
+      const updates = await this.pollScheduler.fetchLatestUpdates(job.group, this.ctx.logger('git-monitor:🧭command:push'))
+      this.logger.info(`✅ 被动消息 last 模式: 获取到 ${updates.length} 个更新`)
+      await this.pushUpdates(job.group, 'passive', updates, options)
     } else {
-      await this.pushUpdates(job.group, 'active', undefined, options)
+      await this.pushUpdates(job.group, 'passive', undefined, options)
     }
   }
 
@@ -474,8 +480,8 @@ export class PushScheduler {
     const count = Math.max(1, Math.min(repoCount, 30))
     const updates = this.buildMockUpdates(count)
     for (const { group } of jobs) {
-      this.logger.info(`Dry-run: 向监控组 ${group.name} 推送 ${updates.length} 条硬编码示例`)
-      await this.pushUpdates(group, 'active', updates, { ...options, dryRun: true })
+      this.logger.info(`🧪 Dry-run: 向监控组 ${group.name} 触发被动消息推送 ${updates.length} 条硬编码示例`)
+      await this.pushUpdates(group, 'passive', updates, { ...options, dryRun: true })
     }
   }
 
@@ -554,7 +560,7 @@ export class PushScheduler {
   }
 
   /**
-   * 获取推送任务状态
+   * 获取主动消息推送任务状态
    */
   getStatus(): Array<{ name: string; enabled: boolean; pushCron: string }> {
     return Array.from(this.jobs.values()).map(job => ({

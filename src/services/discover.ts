@@ -47,7 +47,7 @@ export class RepoDiscoverer {
     private config: Config,
   ) {
     this.axios = createAxiosInstance(config)
-    this.logger = ctx.logger('git-monitor:discover')
+    this.logger = ctx.logger('git-monitor:🔎discover')
   }
 
   async listRepos(source: DiscoverSource): Promise<RepoConfig[]> {
@@ -132,13 +132,13 @@ export class RepoDiscoverer {
   async syncDiscoverGroup(groupName: string): Promise<{ added: number; removed: number }> {
     const dg = this.config.discoverGroups?.find((g: any) => g.name === groupName)
     if (!dg) {
-      this.logger.warn(`未找到发现组: ${groupName}`)
+      this.logger.warn(`⚠️ 未找到发现组: ${groupName}`)
       return { added: 0, removed: 0 }
     }
 
     const mg = this.config.monitorGroups?.find((g: any) => g.name === groupName)
     if (!mg) {
-      this.logger.warn(`未找到对应监控组: ${groupName}`)
+      this.logger.warn(`⚠️ 未找到对应监控组: ${groupName}`)
       return { added: 0, removed: 0 }
     }
 
@@ -147,9 +147,9 @@ export class RepoDiscoverer {
       try {
         const repos = await this.listRepos(source)
         allRepos.push(...repos)
-        this.logger.info(`来源 ${source.platform}/${source.owner}: 获取到 ${repos.length} 个仓库`)
+        this.logger.info(`🔎 来源 ${source.platform}/${source.owner}: 获取到 ${repos.length} 个仓库`)
       } catch (error) {
-        this.logger.error(`获取来源 ${source.platform}/${source.owner} 失败:`, error)
+        this.logger.error(`❌ 获取来源 ${source.platform}/${source.owner} 失败:`, error)
       }
     }
 

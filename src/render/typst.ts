@@ -1,9 +1,12 @@
-import { Context } from 'koishi'
+import { Context, Logger } from 'koishi'
 import { RepoUpdate, PLUGIN_REPO_URL } from '../types'
 import { formatTimestamp } from '../utils/format'
 import { Config } from '../config'
-import path from 'node:path'
 import fs from 'node:fs'
+import path from 'node:path'
+import { ensurePluginAssets } from '../utils/assets'
+import { resolveRuntimeFontPath } from '../utils/fonts'
+import { createConsoleLogger } from '../utils/logger'
 import type { NodeCompiler, NodeAddFontBlobs } from '@myriaddreamin/typst-ts-node-compiler'
 // 导入类型声明
 import {} from 'koishi-plugin-to-image-service'
@@ -102,13 +105,20 @@ const LIGHT_THEME: ThemeColors = {
 export class TypstRenderer {
   private typst: typeof import('@myriaddreamin/typst-ts-node-compiler') | null = null
   private compiler: NodeCompiler | null = null
+  private logger: Logger
+  private log: ReturnType<typeof createConsoleLogger>
   private readonly typstModuleName = '@myriaddreamin/typst-ts-node-compiler'
+  private readonly typstModuleVersion = '0.7.0'
+  private readonly svgIconCache = new Map<string, string>()
   private initialized = false
 
   constructor(
     private ctx: Context,
     private config: Config,
-  ) {}
+  ) {
+    this.logger = ctx.logger('git-monitor:🧩typst')
+    this.log = createConsoleLogger(this.logger, () => this.config.verboseConsoleLog)
+  }
 
   /**
    * 获取当前主题
@@ -121,11 +131,37 @@ export class TypstRenderer {
    * 获取平台对应的 SVG 图标（根据主题自动选择颜色）
    */
   private getPlatformIcon(provider: string): string {
-    if (provider === 'gitee') {
-      return GITEE_SVG
+    const normalizedProvider = provider === 'gitee' ? 'gitee' : 'github'
+    const cacheKey = `${normalizedProvider}:${this.config.typstDarkMode ? 'dark' : 'light'}`
+    const cached = this.svgIconCache.get(cacheKey)
+    if (cached) {
+      return cached
     }
-    // 默认使用 GitHub 图标，根据主题选择颜色
-    return this.config.typstDarkMode ? GITHUB_SVG_WHITE : GITHUB_SVG_BLACK
+
+    const fallbackSvg = normalizedProvider === 'gitee'
+      ? GITEE_SVG
+      : (this.config.typstDarkMode ? GITHUB_SVG_WHITE : GITHUB_SVG_BLACK)
+
+    try {
+      const assetsDir = ensurePluginAssets(this.ctx, this.config.verboseConsoleLog)
+      const svgPath = path.join(assetsDir, `${normalizedProvider}.svg`)
+      let svg = fs.readFileSync(svgPath, 'utf-8')
+
+      if (normalizedProvider === 'github') {
+        const fill = this.config.typstDarkMode ? '#ffffff' : '#24292f'
+        svg = svg
+          .replace(/fill="#[0-9a-fA-F]{3,8}"/g, `fill="${fill}"`)
+          .replace(/\sopacity="[^"]*"/g, '')
+      }
+
+      this.svgIconCache.set(cacheKey, svg)
+      this.log.debug(`🖼️ 使用 Typst SVG Logo: provider=${normalizedProvider}, path=${svgPath}, bytes=${Buffer.byteLength(svg, 'utf-8')}`)
+      return svg
+    } catch (error) {
+      this.logger.warn(`⚠️ 读取 ${normalizedProvider} SVG Logo 失败，回退内置 SVG: ${(error as Error).message}`)
+      this.svgIconCache.set(cacheKey, fallbackSvg)
+      return fallbackSvg
+    }
   }
 
   /**
@@ -133,15 +169,20 @@ export class TypstRenderer {
    * 根据配置选择使用 SVG Logo 或 Emoji Logo
    */
   private generateIconTypst(provider: string, size: string = '14pt'): string {
-    // 调试日志：显示当前配置
     if (this.config.typstLogoType === undefined) {
-      this.ctx.logger('git-monitor').warn(`typstLogoType 配置未定义，使用默认值: emoji`)
+      this.logger.warn(`⚠️ typstLogoType 配置未定义，使用默认值: emoji`)
     } else {
-      this.ctx.logger('git-monitor').debug(`typstLogoType 配置: ${this.config.typstLogoType}`)
+      this.log.debug(`🎨 typstLogoType 配置: ${this.config.typstLogoType}`)
     }
-    
-    // 暂时强制使用 Emoji Logo，避免 SVG 导致的 Typst 语法错误
-    this.ctx.logger('git-monitor').debug(`使用 Emoji Logo 渲染 ${provider}`)
+
+    const validSize = size.endsWith('pt') ? size : '14pt'
+    if (this.config.typstLogoType === 'svg') {
+      const svg = this.getPlatformIcon(provider)
+      this.log.debug(`🧩 使用 SVG Logo 渲染 ${provider}`)
+      return `#box(baseline: 2pt)[#image(bytes(\`\`\`\n${svg}\n\`\`\`.text), format: "svg", width: ${validSize}, height: ${validSize})]`
+    }
+
+    this.log.debug(`😊 使用 Emoji Logo 渲染 ${provider}`)
     const iconMap: Record<string, string> = {
       github: '🐙',
       gitee: '🏮',
@@ -149,8 +190,6 @@ export class TypstRenderer {
       gitcode: '💻'
     }
     const icon = iconMap[provider] || '📦'
-    // 确保 size 参数是有效的 Typst 尺寸格式
-    const validSize = size.endsWith('pt') ? size : '14pt'
     return `#box(baseline: 2pt)[#text(size: ${validSize})[${icon}]]`
   }
 
@@ -171,9 +210,11 @@ export class TypstRenderer {
     if (!this.ctx.toImageService) {
       throw new Error('to-image-service 服务未启用，无法使用 Typst 渲染')
     }
-    this.typst = await this.ctx.node.safeImport(this.typstModuleName)
+    this.typst = await this.ctx.node.safeImport(this.typstModuleName, {
+      version: this.typstModuleVersion,
+    } as any)
     this.initialized = true
-    this.ctx.logger('git-monitor').info('Typst 模块加载成功')
+    this.logger.info(`✅ Typst 模块加载成功: ${this.typstModuleName}@${this.typstModuleVersion}`)
   }
 
   /**
@@ -186,19 +227,19 @@ export class TypstRenderer {
 
     // 尝试加载自定义字体
     const fontArgs: NodeAddFontBlobs[] = []
-    const customFontPath = this.config.typstFontPath
+    const customFontPath = resolveRuntimeFontPath(this.ctx, this.config.typstFontPath || this.config.fontPath)
     if (customFontPath && fs.existsSync(customFontPath)) {
       try {
         const customFontBuffer = fs.readFileSync(customFontPath)
         fontArgs.push({
           fontBlobs: [customFontBuffer],
         })
-        this.ctx.logger('git-monitor').info(`已加载字体: ${customFontPath}`)
+        this.logger.info(`🔡 已加载 Typst 字体: ${customFontPath}`)
       } catch (error) {
-        this.ctx.logger('git-monitor').error('加载字体失败:', error)
+        this.logger.error('❌ 加载 Typst 字体失败:', error)
       }
     } else if (customFontPath) {
-      this.ctx.logger('git-monitor').warn(`字体文件不存在: ${customFontPath}`)
+      this.logger.warn(`⚠️ Typst 字体文件不存在: ${customFontPath}`)
     }
     
     // 创建编译器
@@ -206,7 +247,7 @@ export class TypstRenderer {
       this.compiler = this.typst.NodeCompiler.create({
         fontArgs: fontArgs,
       })
-      this.ctx.logger('git-monitor').debug(`Typst 编译器已创建，加载了 ${fontArgs.length} 个字体`)
+      this.log.debug(`🧩 Typst 编译器已创建，加载了 ${fontArgs.length} 个字体`)
     }
     
     return this.compiler
@@ -248,11 +289,28 @@ export class TypstRenderer {
    */
   private toSvg(content: string): string {
     const compiler = this.getCompiler()
+    const startTime = Date.now()
     try {
+      this.log.debug(`🧩 Typst 开始编译 SVG，源码长度: ${content.length}`)
       let result = compiler.svg({ mainFileContent: content })
+      const rawLength = result.length
       // 修复 SVG 以兼容 resvg
       result = this.fixSvgForResvg(result)
+      this.log.debug(`🧩 Typst SVG 编译完成，用时 ${Date.now() - startTime}ms，长度: ${rawLength} -> ${result.length}`)
       return result
+    } catch (error) {
+      this.logger.error(`❌ Typst 编译 SVG 失败: ${(error as Error).message || String(error)}`)
+      if (this.config.verboseConsoleLog) {
+        try {
+          const diagnostics = (compiler as any).fetchDiagnostics?.(error)
+          if (diagnostics) {
+            this.logger.error(`🧪 Typst diagnostics: ${JSON.stringify(diagnostics).substring(0, 2000)}`)
+          }
+        } catch (diagnosticsError) {
+          this.logger.warn(`⚠️ Typst diagnostics 读取失败: ${(diagnosticsError as Error).message}`)
+        }
+      }
+      throw error
     } finally {
       compiler.evictCache(10)
     }
@@ -264,6 +322,7 @@ export class TypstRenderer {
    */
   private async toPng(content: string): Promise<Buffer> {
     const svg = this.toSvg(content)
+    const startTime = Date.now()
     
     // 使用类型断言绕过 TypeScript 检查
     const toImageService = this.ctx.toImageService as any
@@ -277,7 +336,9 @@ export class TypstRenderer {
         fitTo: { mode: 'zoom', value: this.config.typstRenderScale || 1.3 },
       },
     })
-    return Buffer.from(result)
+    const buffer = Buffer.from(result)
+    this.log.debug(`🖼️ resvg 转 PNG 完成，用时 ${Date.now() - startTime}ms，SVG=${svg.length} chars，PNG=${buffer.length} bytes`)
+    return buffer
   }
 
   /**
@@ -545,7 +606,8 @@ ${repoSections}
 
     const typstCode = this.generateBatchTypst(updates, groupName)
     
-    this.ctx.logger('git-monitor').debug('生成的 Typst 代码:\n' + typstCode.substring(0, 1000) + '\n...')
+    this.log.debug(`🧩 生成 Typst 代码: group=${groupName}, updates=${updates.length}, length=${typstCode.length}`)
+    this.log.debug('🧪 生成的 Typst 代码片段:\n' + typstCode.substring(0, 1000) + '\n...')
     
     // 文件日志输出：保存 Typst 代码文件
     if (this.config.verboseFileLog) {
@@ -562,8 +624,8 @@ ${repoSections}
       
       return Buffer.from(buffer)
     } catch (error) {
-      this.ctx.logger('git-monitor').error('批量渲染失败:', error)
-      this.ctx.logger('git-monitor').error('Typst 代码片段:\n' + typstCode.substring(0, 500))
+      this.logger.error('❌ Typst 批量渲染失败:', error)
+      this.logger.error('🧪 Typst 代码片段:\n' + typstCode.substring(0, 500))
       return null
     }
   }
@@ -589,9 +651,9 @@ ${repoSections}
       const filePath = path.join(logDir, filename)
       await fs.writeFile(filePath, buffer)
       
-      this.ctx.logger('git-monitor').info(`已保存 ${groupName} 的图片到: ${filePath}`)
+      this.logger.info(`📝 已保存 ${groupName} 的 Typst 图片到: ${filePath}`)
     } catch (error) {
-      this.ctx.logger('git-monitor').warn(`保存图片文件失败: ${(error as Error).message}`)
+      this.logger.warn(`⚠️ 保存 Typst 图片文件失败: ${(error as Error).message}`)
     }
   }
 
@@ -616,10 +678,10 @@ ${repoSections}
       const filePath = path.join(logDir, 'typst.latest.typ')
       await fs.writeFile(filePath, typstCode, 'utf-8')
       
-      this.ctx.logger('git-monitor').info(`已保存 ${groupName} 的 Typst 代码到: ${filePath}`)
-      this.ctx.logger('git-monitor').debug(`Typst 代码长度: ${typstCode.length} 字符`)
+      this.logger.info(`📝 已保存 ${groupName} 的 Typst 代码到: ${filePath}`)
+      this.log.debug(`🧪 Typst 代码长度: ${typstCode.length} 字符`)
     } catch (error) {
-      this.ctx.logger('git-monitor').warn(`保存 Typst 代码文件失败: ${(error as Error).message}`)
+      this.logger.warn(`⚠️ 保存 Typst 代码文件失败: ${(error as Error).message}`)
     }
   }
 
@@ -647,7 +709,7 @@ ${repoSections}
         const buffer = await this.renderUpdate(update)
         results.push(buffer)
       } catch (error) {
-        this.ctx.logger('git-monitor').error(`渲染失败 ${update.repoName}:`, error)
+        this.logger.error(`❌ 渲染失败 ${update.repoName}:`, error)
       }
     }
     

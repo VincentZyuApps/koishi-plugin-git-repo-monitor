@@ -1,6 +1,6 @@
 import { Config } from '../config'
 import { RepoUpdate } from '../types'
-import { renderTextPerRepo, renderTextSummary } from './render-text'
+import { renderTextPerRepo, renderTextSummary } from './text'
 
 export interface ForwardNode {
   name: string

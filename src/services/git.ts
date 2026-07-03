@@ -135,6 +135,10 @@ export class GitHubProvider implements GitProvider {
     this.axios = createAxiosInstance(config)
   }
 
+  private get logger() {
+    return this.ctx.logger('git-monitor:🌐github')
+  }
+
   private async fetch(endpoint: string, retryCount = 0): Promise<any> {
     const maxRetries = 2
     
@@ -159,7 +163,7 @@ export class GitHubProvider implements GitProvider {
       // 记录剩余配额
       const remaining = githubRateLimiter.getRemaining()
       if (remaining >= 0 && remaining < 50) {
-        this.ctx.logger('git-monitor').warn(`⚠️ GitHub API 配额即将用尽，剩余: ${remaining}`)
+        this.logger.warn(`⚠️ GitHub API 配额即将用尽，剩余: ${remaining}`)
       }
       
       return response.data
@@ -179,7 +183,7 @@ export class GitHubProvider implements GitProvider {
           const waitSec = resetTime ? Math.ceil((resetTime.getTime() - Date.now()) / 1000) : 60
           
           if (retryCount < maxRetries && waitSec <= 120) {
-            this.ctx.logger('git-monitor').warn(`⏳ GitHub API 配额用尽，等待 ${waitSec} 秒后重试...`)
+            this.logger.warn(`⏳ GitHub API 配额用尽，等待 ${waitSec} 秒后重试...`)
             await sleep(Math.min(waitSec * 1000, 120000)) // 最多等 120 秒
             return this.fetch(endpoint, retryCount + 1)
           }
@@ -189,7 +193,7 @@ export class GitHubProvider implements GitProvider {
         
         // 其他 403 错误（如权限问题），等一会儿重试
         if (retryCount < maxRetries) {
-          this.ctx.logger('git-monitor').warn(`⏳ 遇到 403 错误，等待 ${(retryCount + 1) * 5} 秒后重试...`)
+          this.logger.warn(`⏳ 遇到 403 错误，等待 ${(retryCount + 1) * 5} 秒后重试...`)
           await sleep((retryCount + 1) * 5000)
           return this.fetch(endpoint, retryCount + 1)
         }
@@ -201,7 +205,7 @@ export class GitHubProvider implements GitProvider {
         const waitSec = retryAfter ? parseInt(retryAfter, 10) : 60
         
         if (retryCount < maxRetries) {
-          this.ctx.logger('git-monitor').warn(`⏳ 请求过于频繁 (429)，等待 ${waitSec} 秒后重试...`)
+          this.logger.warn(`⏳ 请求过于频繁 (429)，等待 ${waitSec} 秒后重试...`)
           await sleep(waitSec * 1000)
           return this.fetch(endpoint, retryCount + 1)
         }
@@ -261,13 +265,13 @@ export class GitHubProvider implements GitProvider {
         if (fallbackBranches.length > 0) {
           for (const fallbackBranch of fallbackBranches) {
             try {
-              this.ctx.logger('git-monitor').warn(`⚠️ 分支 "${branch}" 不存在，尝试 "${fallbackBranch}": ${owner}/${repo}`)
+              this.logger.warn(`⚠️ 分支 "${branch}" 不存在，尝试 "${fallbackBranch}": ${owner}/${repo}`)
               const fallbackParams: Record<string, string> = { sha: fallbackBranch }
               if (since) fallbackParams.since = since
               
               const fallbackResponse = await this.fetch(`/repos/${owner}/${repo}/commits?${new URLSearchParams(fallbackParams)}`)
               
-              this.ctx.logger('git-monitor').success(`✅ 使用备用分支 "${fallbackBranch}": ${owner}/${repo}`)
+              this.logger.success(`✅ 使用备用分支 "${fallbackBranch}": ${owner}/${repo}`)
               
               const fallbackCommits = fallbackResponse.map((c: any) => ({
                 sha: c.sha,
@@ -291,12 +295,12 @@ export class GitHubProvider implements GitProvider {
           }
           // main/master 都失败了
           const errorMsg = `分支 "${branch}" 和备用分支 "${fallbackBranches[0]}" 均不存在`
-          this.ctx.logger('git-monitor').error(`❌ ${errorMsg}: ${owner}/${repo}`)
+          this.logger.error(`❌ ${errorMsg}: ${owner}/${repo}`)
           throw new Error(errorMsg)
         } else {
           // 用户配置的不是 main/master，直接报错
           const errorMsg = `分支 "${branch}" 不存在（仅 main/master 支持自动回退）`
-          this.ctx.logger('git-monitor').error(`❌ ${errorMsg}: ${owner}/${repo}`)
+          this.logger.error(`❌ ${errorMsg}: ${owner}/${repo}`)
           throw new Error(errorMsg)
         }
       }
@@ -343,6 +347,10 @@ export class GiteeProvider implements GitProvider {
     this.axios = createAxiosInstance(config)
   }
 
+  private get logger() {
+    return this.ctx.logger('git-monitor:🌐gitee')
+  }
+
   private async fetch(endpoint: string): Promise<any> {
     // 等待速率限制器
     await giteeRateLimiter.waitForSlot()
@@ -378,13 +386,13 @@ export class GiteeProvider implements GitProvider {
         if (fallbackBranches.length > 0) {
           for (const fallbackBranch of fallbackBranches) {
             try {
-              this.ctx.logger('git-monitor').warn(`⚠️ 分支 "${branch}" 不存在，尝试 "${fallbackBranch}": ${owner}/${repo}`)
+              this.logger.warn(`⚠️ 分支 "${branch}" 不存在，尝试 "${fallbackBranch}": ${owner}/${repo}`)
               const fallbackParams: Record<string, string> = { sha: fallbackBranch }
               if (since) fallbackParams.since = since
               
               const commits = await this.fetch(`/repos/${owner}/${repo}/commits?${new URLSearchParams(fallbackParams)}`)
               
-              this.ctx.logger('git-monitor').success(`✅ 使用备用分支 "${fallbackBranch}": ${owner}/${repo}`)
+              this.logger.success(`✅ 使用备用分支 "${fallbackBranch}": ${owner}/${repo}`)
               return commits.map((c: any) => ({
                 sha: c.sha,
                 shortSha: c.sha.substring(0, 7),
@@ -400,12 +408,12 @@ export class GiteeProvider implements GitProvider {
           }
           // main/master 都失败了
           const errorMsg = `分支 "${branch}" 和备用分支 "${fallbackBranches[0]}" 均不存在`
-          this.ctx.logger('git-monitor').error(`❌ ${errorMsg}: ${owner}/${repo}`)
+          this.logger.error(`❌ ${errorMsg}: ${owner}/${repo}`)
           throw new Error(errorMsg)
         } else {
           // 用户配置的不是 main/master，直接报错
           const errorMsg = `分支 "${branch}" 不存在（仅 main/master 支持自动回退）`
-          this.ctx.logger('git-monitor').error(`❌ ${errorMsg}: ${owner}/${repo}`)
+          this.logger.error(`❌ ${errorMsg}: ${owner}/${repo}`)
           throw new Error(errorMsg)
         }
       }
@@ -414,7 +422,7 @@ export class GiteeProvider implements GitProvider {
       const errorMsg = error.response?.status 
         ? `HTTP ${error.response.status}: ${error.response.statusText || error.message}` 
         : error.message
-      this.ctx.logger('git-monitor').error(`❌ 获取提交失败 ${owner}/${repo}:`, errorMsg)
+      this.logger.error(`❌ 获取提交失败 ${owner}/${repo}:`, errorMsg)
       throw new Error(errorMsg)
     }
   }

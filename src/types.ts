@@ -118,7 +118,7 @@ export interface RepoUpdate {
 }
 
 /**
- * 推送任务
+ * 待推送队列任务
  */
 export interface PushTask {
   /** 监控组 */

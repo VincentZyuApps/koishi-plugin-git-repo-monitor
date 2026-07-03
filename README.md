@@ -38,20 +38,52 @@
 ## 功能特性
 
 - 🔄 **多仓库监控**: 支持同时监控多个 Git 仓库的提交和发布
-- ⏰ **灵活定时**: 独立配置轮询间隔和推送间隔
+- ⏰ **灵活定时**: 独立配置轮询间隔和主动消息推送间隔
 - 🎨 **精美渲染**: 使用 Typst 渲染精美的更新通知卡片
 - 📢 **多平台推送**: 支持推送到多个平台和频道
 - 🔧 **高度可配置**: 灵活的配置项满足各种需求
 - 📦 **模块化设计**: 清晰的代码结构，易于扩展和维护
 - 🔎 **动态发现**: 从 GitHub/Gitee 用户/组织主页自动解析仓库列表，支持自动同步
 - 📊 **仓库排序**: 支持时间降序/升序、字母降序/升序四种排序方式
+- 💬 **主动/被动消息**: 按 QQ 官方 Bot 语境区分定时主动推送和指令被动响应
 
 ## 可选依赖
 
 - `database` - 数据库服务（必需）
 - `puppeteer` - Puppeteer 图片渲染（模式：puppeteer-image）
-- `to-image-service` + `w-node` - Typst 图片渲染（模式：typst-image）
+- `to-image-service >= 0.1.5` + `w-node >= 2.0.0` - Typst 图片渲染（模式：typst-image），Typst 编译器固定使用 `@myriaddreamin/typst-ts-node-compiler@0.7.0`
 - `onebot` - 合并转发功能（模式：forward）
+
+## 内置资源缓存
+
+插件启动时会自动把包内置的 `assets` 目录复制到 Koishi 根目录下的固定路径：
+
+```text
+ctx.baseDir/data/assets/git-repo-monitor
+```
+
+Puppeteer 与 Typst 渲染会优先从该目录读取 GitHub/Gitee 图标资源；如果同步失败，会回退到插件包内置资源目录。该路径不需要配置项。
+
+## 字体下载缓存
+
+插件可自动下载并校验默认字体 `LXGWWenKaiMono-Regular.ttf`，用于 Puppeteer 与 Typst 图片渲染。
+
+```text
+ctx.baseDir/data/fonts/LXGWWenKaiMono-Regular.ttf
+```
+
+配置页里的默认 `fontPath` 会展示为 `process.cwd()/data/fonts/LXGWWenKaiMono-Regular.ttf`，这是因为 Koishi Schema 阶段拿不到 `ctx.baseDir`；运行时会自动映射到 `ctx.baseDir/data/fonts/LXGWWenKaiMono-Regular.ttf`。下载顺序为 **Gitee release 优先**，失败后 fallback 到 **GitHub release**，下载后会校验 `size + md5 + sha1 + sha256 + sha512`。
+
+- Gitee: <https://gitee.com/vincent-zyu/koishi-plugin-awa-quote-image/releases/download/fonts/LXGWWenKaiMono-Regular.ttf>
+- GitHub: <https://github.com/VincentZyuApps/koishi-plugin-awa-quote-image/releases/download/fonts/LXGWWenKaiMono-Regular.ttf>
+
+## 主动消息与被动消息
+
+本插件按 QQ 官方 Bot 语境区分主动消息和被动消息：
+
+- **主动消息 (`active`)**：Bot 不依赖当前用户指令，按 `pushCron` 定时主动推送待推送队列，使用 `activeOutputModes`。
+- **被动消息 (`passive`)**：用户执行指令触发，例如 `git-monitor.push` / `git-monitor.dryrun`，使用 `passiveOutputModes`。
+- **轮询检查 (`pollCron`)**：只负责检查仓库更新并加入待推送队列，不直接发送消息。
 
 ## 配置说明
 
@@ -65,6 +97,21 @@
 - **repoSortOrder**: 仓库卡片排序方式（time-desc(默认)/time-asc/alpha-asc/alpha-desc）
 - **repoFetchTimeout**: 单仓库 API 请求超时毫秒数（默认 300000 = 5 分钟）
 - **immediatePollOnStart**: 启动时是否立即执行一次轮询（默认 false）
+
+### 字体下载配置
+
+- **enableFontDownload**: 是否自动下载默认字体（默认 true）。
+- **fontPath**: 默认字体路径，配置页默认展示 `process.cwd()/data/fonts/LXGWWenKaiMono-Regular.ttf`，运行时映射到 `ctx.baseDir/data/fonts/LXGWWenKaiMono-Regular.ttf`。
+- **typstFontPath**: Typst 字体路径覆盖项，留空使用 `fontPath`。
+- **puppeteerFontPath**: Puppeteer 字体路径覆盖项，留空使用 `fontPath`。
+
+### 触发与输出模式
+
+- **activeOutputModes**: 主动消息输出形式，Bot 按 `pushCron` 定时主动推送时使用。
+- **passiveOutputModes**: 被动消息输出形式，用户执行 `git-monitor.push` / `git-monitor.dryrun` 指令时使用。
+- **defaultPushMode**: `git-monitor.push` 未指定 `-m` 参数时使用的默认模式。
+  - `new`: 推送当前待推送队列中的新更新，不重新拉取所有仓库。
+  - `last`: 即时拉取所有仓库最新状态，并作为被动消息发送。
 
 ### 监控组配置
 
@@ -81,8 +128,8 @@
   - **url**: 仓库地址（支持 GitHub、Gitee 等）
   - **branch**: 分支名称（默认 `main`）
   - **type**: 监听类型（`commits` 或 `releases`）
-- **pollCron**: 轮询 Cron 表达式（检查更新频率）
-- **pushCron**: 推送 Cron 表达式（推送通知频率）
+- **pollCron**: 轮询 Cron 表达式（检查更新频率；发现的新更新会加入待推送队列，不直接发送）
+- **pushCron**: 主动消息推送 Cron 表达式（Bot 定时主动发送待推送队列的频率）
 - **enabled**: 是否启用此监控组（默认 true）
 
 ## 使用示例
@@ -90,8 +137,10 @@
 ```yaml
 plugins:
   git-repo-monitor:
-    typstFontPath: /path/to/LXGWWenKaiMono-Regular.ttf
-    puppeteerFontPath: /path/to/LXGWWenKaiMono-Regular.ttf
+    enableFontDownload: true
+    fontPath: ./data/fonts/LXGWWenKaiMono-Regular.ttf
+    typstFontPath: ''
+    puppeteerFontPath: ''
     maxCommitsPerPush: 10
     monitorGroups:
       - name: Koishi 生态监控
@@ -111,8 +160,8 @@ plugins:
           - url: https://github.com/koishijs/koishi-plugin-puppeteer
             branch: main
             type: releases
-        pollCron: '*/10 * * * *'  # 每 10 分钟检查一次
-        pushCron: '0 */2 * * *'   # 每 2 小时推送一次
+        pollCron: '*/10 * * * *'  # 每 10 分钟检查一次，发现新更新后加入待推送队列
+        pushCron: '0 */2 * * *'   # 每 2 小时发送一次主动消息
         enabled: true
 ```
 
@@ -121,12 +170,12 @@ plugins:
 | 指令 | 说明 | 示例 |
 |------|------|------|
 | `git-monitor` | 查看监控状态 | `git-monitor` |
-| `git-monitor.check <组名>` | 手动触发检查 | `git-monitor.check qwq` |
+| `git-monitor.check <组名>` | 指令触发检查<br>发现的新更新会加入待推送队列，不会立即发送 | `git-monitor.check qwq` |
 | `git-monitor.discover <urls> [-n name] [--no-sync]` | 从 GitHub/Gitee 用户或组织创建动态监控组<br>• `-n <名称>`: 指定组名<br>• `--no-sync`: 创建后不同步仓库列表 | `git-monitor.discover https://github.com/owner1`<br>`git-monitor.discover https://github.com/owner1 -n my-group` |
-| `git-monitor.dryrun [-n count]` | 使用硬编码假数据测试推送<br>• `-n <数量>`: 指定仓库数量 (1-30)<br>• 默认 15 个仓库 | `git-monitor.dryrun`<br>`git-monitor.dryrun -n 20` |
+| `git-monitor.dryrun [-n count]` | 使用硬编码假数据测试被动消息推送与渲染<br>• `-n <数量>`: 指定仓库数量 (1-30)<br>• 默认 15 个仓库 | `git-monitor.dryrun`<br>`git-monitor.dryrun -n 20` |
 | `git-monitor.inspect <组名> [-p page] [-l limit] [-s sort] [-v]` | 查看监控组仓库详情<br>• `-p <页码>`: 页码 (默认1)<br>• `-l <数量>`: 每页条数 (默认10)<br>• `-s <方式>`: time-desc(默认)/time-asc/alpha-asc/alpha-desc<br>• `-v`: 显示最新 commit 详情 | `git-monitor.inspect qwq`<br>`git-monitor.inspect qwq -p 2 -l 20 -s alpha-asc` |
 | `git-monitor.list [--verbose]` | 列出所有监控组概要<br>• `--verbose`: 显示全部仓库详情（⚠️可能超限） | `git-monitor.list`<br>`git-monitor.list --verbose` |
-| `git-monitor.push <组名> [-m mode]` | 手动触发推送<br>• `-m new` (默认): 仅推送新更新<br>• `-m last`: 强制推送最新状态 | `git-monitor.push qwq`<br>`git-monitor.push qwq -m last` |
+| `git-monitor.push <组名> [-m mode]` | 触发一次被动消息推送<br>• 未指定 `-m` 时使用 `defaultPushMode`（默认 `last`）<br>• `-m new`: 发送当前待推送队列，不重新拉取所有仓库<br>• `-m last`: 即时拉取所有仓库最新状态并发送 | `git-monitor.push qwq`<br>`git-monitor.push qwq -m last` |
 
 ## Cron 表达式
 
@@ -186,10 +235,10 @@ plugins:
    // 过滤掉 <= 上次检查点的提交
    const newCommits = rawCommits.filter(c => c.date.getTime() > checkpointTime)
    ```
-4. **状态更新**：一旦确认有新提交并准备推送，将最新一条 Commit 的 SHA 或时间戳更新回数据库，作为下一次检查的基准。
+4. **状态更新**：检查阶段一旦确认有新提交，就将最新一条 Commit 的 SHA 或时间戳更新回数据库，并把更新加入待推送队列。
 5. **首次运行 (Silent Start)**：如果是第一次添加仓库（无数据库记录）：
-   - 默认开启 `silentStart`：仅将最新 Commit 记录为 Checkpoint，**不发送推送**，防止刚添加时刷屏。
-   - 关闭 `silentStart`：将最新一条 Commit 视为更新并推送。
+   - 默认开启 `silentStart`：仅将最新 Commit 记录为 Checkpoint，**不加入待推送队列**，防止刚添加时刷屏。
+   - 关闭 `silentStart`：将最新一条 Commit 视为更新并加入待推送队列。
 
 ## 架构设计
 
@@ -198,19 +247,22 @@ src/
 ├── index.ts              # 插件入口
 ├── config.ts             # 配置定义
 ├── types.ts              # 类型定义
+├── render/
+│   ├── typst.ts       # Typst 渲染服务
+│   ├── puppeteer.ts   # Puppeteer 渲染服务
+│   ├── forward.ts     # 合并转发服务
+│   └── text.ts        # 文本渲染服务
 ├── services/
 │   ├── discover.ts       # 动态发现服务
-│   ├── git.ts            # Git API 服务
-│   ├── renderer-typst.ts # Typst 渲染服务
-│   ├── render-puppeteer.ts # Puppeteer 渲染服务
-│   ├── render-forward.ts   # 合并转发服务
-│   └── render-text.ts      # 文本渲染服务
+│   └── git.ts            # Git API 服务
 ├── scheduler/
-│   ├── poller.ts         # 轮询调度器
-│   └── pusher.ts         # 推送调度器
+│   ├── poller.ts         # 轮询检查/待推送队列调度器
+│   └── pusher.ts         # 主动/被动消息推送调度器
 └── utils/
+    ├── assets.ts         # 内置资源缓存
+    ├── fonts.ts          # 字体下载与运行时路径解析
     ├── storage.ts        # 数据存储
-    ├── file-logger.ts    # 文件日志工具
+    ├── file.ts           # 文件日志工具
     └── format.ts         # 格式化工具
 ```
 

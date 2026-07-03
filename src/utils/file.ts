@@ -45,8 +45,8 @@ export function writeRepoUpdatesToJson(
     }
     
     fs.writeFileSync(jsonPath, JSON.stringify(dataToSave, null, 2), 'utf8')
-    logger.info(`已保存仓库信息到: ${jsonPath}`)
+    logger.info(`📝 已保存仓库信息到: ${jsonPath}`)
   } catch (error) {
-    logger.error('保存仓库信息到 JSON 文件失败:', error)
+    logger.error('❌ 保存仓库信息到 JSON 文件失败:', error)
   }
 }

@@ -4,9 +4,10 @@ import * as path from 'path'
 import { MonitorGroup, RepoUpdate } from '../types'
 import { GitService, parseRepoUrl } from '../services/git'
 import { StorageManager } from '../utils/storage'
-import { writeRepoUpdatesToJson } from '../utils/file-logger'
+import { writeRepoUpdatesToJson } from '../utils/file'
 import { RepoDiscoverer } from '../services/discover'
 import { Config } from '../config'
+import { createConsoleLogger } from '../utils/logger'
 
 /**
  * 轮询任务
@@ -23,6 +24,7 @@ interface PollTask {
 export class PollScheduler {
   private tasks: Map<string, PollTask> = new Map()
   private logger: Logger
+  private log: ReturnType<typeof createConsoleLogger>
   
   constructor(
     private _ctx: Context, // Used by methods
@@ -31,7 +33,8 @@ export class PollScheduler {
     private config: Config,
     private discoverer?: RepoDiscoverer,
   ) {
-    this.logger = _ctx.logger('git-monitor:poll')
+    this.logger = _ctx.logger('git-monitor:🔁poll')
+    this.log = createConsoleLogger(this.logger, () => this.config.verboseConsoleLog)
   }
 
   /**
@@ -39,14 +42,14 @@ export class PollScheduler {
    */
   start(group: MonitorGroup): void {
     if (!group.enabled) {
-      this.logger.info(`监控组 ${group.name} 已禁用，跳过`)
+      this.logger.info(`⏭️ 监控组 ${group.name} 已禁用，跳过`)
       return
     }
     
     // 如果已存在任务，先停止
     this.stop(group.name)
     
-    this.logger.info(`启动监控组 ${group.name} 的轮询任务，Cron: ${group.pollCron}`)
+    this.logger.info(`🚀 启动监控组 ${group.name} 的轮询任务，Cron: ${group.pollCron}`)
     
     const job = cron.schedule(group.pollCron, async () => {
       await this.checkUpdates(group)
@@ -61,7 +64,7 @@ export class PollScheduler {
     // 根据配置决定是否立即执行一次检查
     if (this.config.immediatePollOnStart) {
       this.checkUpdates(group).catch(error => {
-        this.logger.error(`初始检查失败 ${group.name}:`, error)
+        this.logger.error(`❌ 初始检查失败 ${group.name}:`, error)
       })
     }
   }
@@ -74,7 +77,7 @@ export class PollScheduler {
     if (task) {
       task.job.stop()
       this.tasks.delete(groupName)
-      this.logger.info(`停止监控组 ${groupName} 的轮询任务`)
+      this.logger.info(`🛑 停止监控组 ${groupName} 的轮询任务`)
     }
   }
 
@@ -98,7 +101,7 @@ export class PollScheduler {
     const processRepo = async (repo: MonitorGroup['repos'][0], index: number): Promise<RepoUpdate | null> => {
       const progress = ((index + 1) / totalRepos) * 100
       const startTime = Date.now()
-      logger.info(`【指令触发】[${index + 1}/${totalRepos}] [${progress.toFixed(2)}%] 正在获取: ${repo.url}`)
+      logger.info(`🔍【被动消息触发】[${index + 1}/${totalRepos}] [${progress.toFixed(2)}%] 正在获取: ${repo.url}`)
       try {
         const timeoutMs = this.config.repoFetchTimeout || 300000
         const update = await Promise.race([
@@ -149,20 +152,20 @@ export class PollScheduler {
   }
 
   /**
-   * 检查更新（公开方法，供手动触发）
+   * 指令触发检查，发现的新更新会加入待推送队列。
    */
   async triggerCheck(group: MonitorGroup): Promise<number> {
-    this.logger.info(`手动触发检查: ${group.name}`)
+    this.logger.info(`🔍 被动消息触发检查: ${group.name}`)
     const task = this.tasks.get(group.name)
     if (!task) {
-      this.logger.warn(`监控组 ${group.name} 未启动，无法检查`)
+      this.logger.warn(`⚠️ 监控组 ${group.name} 未启动，无法检查`)
       return 0
     }
     
     const beforeCount = task.pendingUpdates.length
     await this.checkUpdates(group)
     const newCount = task.pendingUpdates.length - beforeCount
-    this.logger.info(`检查完成: ${group.name}，发现 ${newCount} 个新更新`)
+    this.logger.info(`✅ 检查完成: ${group.name}，发现 ${newCount} 个新更新`)
     return newCount
   }
 
@@ -170,7 +173,7 @@ export class PollScheduler {
    * 检查更新
     */
   private async checkUpdates(group: MonitorGroup): Promise<void> {
-    this.logger.debug(`检查更新: ${group.name}`)
+    this.log.debug(`🔍 检查更新: ${group.name}`)
     
     const task = this.tasks.get(group.name)
     if (!task) return
@@ -186,7 +189,7 @@ export class PollScheduler {
     const processRepo = async (repo: MonitorGroup['repos'][0], index: number): Promise<RepoUpdate | null> => {
       const progress = ((index + 1) / totalRepos) * 100
       const startTime = Date.now()
-      this.logger.info(`[${index + 1}/${totalRepos}] [${progress.toFixed(2)}%] 获取: ${repo.url}`)
+      this.log.debug(`🔍 [${index + 1}/${totalRepos}] [${progress.toFixed(2)}%] 获取: ${repo.url}`)
       try {
         const timeoutMs = this.config.repoFetchTimeout || 300000
         const update = await Promise.race([
@@ -199,7 +202,7 @@ export class PollScheduler {
         if (update) {
           this.logger.info(`✅ [${elapsed}ms] 发现新更新: ${update.repoName} (${update.type})`)
         } else {
-          this.logger.info(`⏭️ [${elapsed}ms] 无新更新: ${repo.url}`)
+          this.log.debug(`⏭️ [${elapsed}ms] 无新更新: ${repo.url}`)
         }
         return update
       } catch (error) {
@@ -306,10 +309,10 @@ export class PollScheduler {
       
       // 更新检查点
       await this.storage.updateCheckpoint(repo.url, branch, commits[0].date.toISOString())
-      // 根据配置决定是否推送
+      // 根据 silentStart 决定首次检查是否加入待推送队列。
       if (!lastCheckpoint && this.config.silentStart) {
-        // 首次运行仅保存 checkpoint，不推送
-        this.logger.info(`初始化检查点 ${repoName} (${branch}): ${commits[0].shortSha}`)
+        // 首次运行仅保存 checkpoint，不加入待推送队列，避免刷屏。
+        this.log.debug(`📍 初始化检查点 ${repoName} (${branch}): ${commits[0].shortSha}`)
         return null
       }
       

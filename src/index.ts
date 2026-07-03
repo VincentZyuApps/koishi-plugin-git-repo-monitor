@@ -1,13 +1,14 @@
 import { Context, Session, h } from 'koishi'
-import fs from 'node:fs'
 import { Config } from './config'
 import { RepoState, PushRecord, DiscoverSource, GitCommit } from './types'
 import { GitService } from './services/git'
-import { TypstRenderer } from './services/renderer-typst'
+import { TypstRenderer } from './render/typst'
 import { PollScheduler } from './scheduler/poller'
 import { PushScheduler } from './scheduler/pusher'
 import { StorageManager } from './utils/storage'
 import { RepoDiscoverer } from './services/discover'
+import { ensurePluginAssets } from './utils/assets'
+import { ensureDefaultFont } from './utils/fonts'
 
 // 导入类型声明
 import {} from 'koishi-plugin-to-image-service'
@@ -20,7 +21,7 @@ export const name = 'git-repo-monitor'
 // 声明插件依赖的服务
 export const inject = {
   required: ['database'],
-  optional: ['http', 'toImageService', 'typstToImageService', 'node', 'puppeteer'],
+  optional: ['http', 'node', 'toImageService', 'puppeteer'],
 }
 
 export { Config }
@@ -35,9 +36,9 @@ declare module 'koishi' {
 }
 
 export function apply(ctx: Context, config: Config) {
-  const logger = ctx.logger('git-monitor')
-  const pollLogger = ctx.logger('git-monitor:轮询触发:poll')
-  const pushLogger = ctx.logger('git-monitor:指令触发:push')
+  const logger = ctx.logger('git-monitor:🧭main')
+
+  ensurePluginAssets(ctx, config.verboseConsoleLog)
 
   // ============ 监控组名称去重检查 ============
   {
@@ -112,16 +113,18 @@ export function apply(ctx: Context, config: Config) {
 
   // ============ 加载字体并初始化 Typst ============
   ctx.on('ready', async () => {
+    await ensureDefaultFont(ctx, config.enableFontDownload, config.verboseConsoleLog)
+
     // 初始化 Typst 编译器
     if (ctx.node && ctx.toImageService) {
       try {
         await renderer.init()
-        logger.info('Typst 编译器初始化成功')
+        logger.info('✅ Typst 编译器初始化成功')
       } catch (error) {
-        logger.error('Typst 编译器初始化失败:', error)
+        logger.error('❌ Typst 编译器初始化失败:', error)
       }
     } else {
-      logger.warn('未启用 to-image-service 或 w-node，Typst 图片渲染不可用')
+      logger.warn('⚠️ 未启用 to-image-service 或 w-node，Typst 图片渲染不可用')
     }
   })
 
@@ -137,16 +140,16 @@ export function apply(ctx: Context, config: Config) {
 
   // ============ 启动监控任务 ============
   ctx.on('ready', async () => {
-    logger.info('Git 仓库监控插件启动')
+    logger.info('🚀 Git 仓库监控插件启动')
 
     // 同步动态发现组
     if (config.discoverGroups?.length) {
-      logger.info(`检测到 ${config.discoverGroups.length} 个动态发现组，开始同步仓库列表...`)
+      logger.info(`🔎 检测到 ${config.discoverGroups.length} 个动态发现组，开始同步仓库列表...`)
       await discoverer.syncAllDiscoverGroups()
     }
     
     if (!config.monitorGroups || config.monitorGroups.length === 0) {
-      logger.warn('未配置监控组，请在配置中添加监控组')
+      logger.warn('⚠️ 未配置监控组，请在配置中添加监控组')
       return
     }
     
@@ -156,14 +159,14 @@ export function apply(ctx: Context, config: Config) {
         try {
           pollScheduler.start(group)
           pushScheduler.start(group)
-          logger.info(`启动监控组: ${group.name}`)
+          logger.info(`✅ 启动监控组: ${group.name}`)
         } catch (error) {
-          logger.error(`启动监控组失败 ${group.name}:`, error)
+          logger.error(`❌ 启动监控组失败 ${group.name}:`, error)
         }
       }
     }
     
-    logger.info(`共启动 ${config.monitorGroups.filter(g => g.enabled !== false).length} 个监控组`)
+    logger.info(`📊 共启动 ${config.monitorGroups.filter(g => g.enabled !== false).length} 个监控组`)
   })
 
   // ============ 注册命令 ============
@@ -184,13 +187,13 @@ export function apply(ctx: Context, config: Config) {
         lines.push(`  ├─ 状态: ${status.enabled ? '✅ 运行中' : '❌ 已停止'}`)
         lines.push(`  ├─ 仓库数: ${status.repoCount}`)
         lines.push(`  ├─ 待推送: ${status.pendingCount}`)
-        lines.push(`  └─ 推送周期: ${pushInfo?.pushCron || '未知'}\n`)
+        lines.push(`  └─ 主动消息周期: ${pushInfo?.pushCron || '未知'}\n`)
       }
       
       return formatCommandReply(session, lines.join('\n'))
     })
 
-  ctx.command('git-monitor.check <group:string>', '手动触发检查')
+  ctx.command('git-monitor.check <group:string>', '指令触发检查，发现的新更新加入待推送队列')
     .action(async ({ session }, group) => {
       if (!group) {
         return formatCommandReply(session, '请指定监控组名称')
@@ -202,17 +205,17 @@ export function apply(ctx: Context, config: Config) {
       }
       
       try {
-        if (session) await session.send(formatCommandReply(session, `🔍 开始检查 ${group}...`))
+        if (session) await session.send(formatCommandReply(session, `🔍 开始检查 ${group}，新更新将加入待推送队列...`))
         const newCount = await pollScheduler.triggerCheck(monitorGroup)
-        return formatCommandReply(session, `✅ 检查完成，发现 ${newCount} 个新更新`)
+        return formatCommandReply(session, `✅ 检查完成，发现 ${newCount} 个新更新并加入待推送队列`)
       } catch (error) {
-        logger.error(`手动检查失败:`, error)
+        logger.error(`❌ 指令触发检查失败:`, error)
         return formatCommandReply(session, `❌ 检查失败: ${(error as Error).message || String(error)}`)
       }
     })
 
-  ctx.command('git-monitor.push <group:string>', '手动触发推送')
-    .option('mode', '-m <mode:string> 推送模式：last (最新状态) 或 new (新增)')
+  ctx.command('git-monitor.push <group:string>', '触发一次被动消息推送')
+    .option('mode', '-m <mode:string> 被动消息推送模式：last (最新状态) 或 new (待推送队列)')
     .action(async ({ session, options }, group) => {
       if (!group) {
         return formatCommandReply(session, '请指定监控组名称')
@@ -227,17 +230,17 @@ export function apply(ctx: Context, config: Config) {
       const mode = (options?.mode as 'new' | 'last') || config.defaultPushMode
       try {
         if (verboseLog && session) {
-          await session.send(formatCommandReply(session, `📤 开始推送 ${group} (模式: ${mode})...`))
+          await session.send(formatCommandReply(session, `📤 开始被动消息推送 ${group} (模式: ${mode})...`))
         }
         await pushScheduler.triggerPush(group, mode, { quoteContext, sessionChannel })
-        return formatCommandReply(session, verboseLog ? '✅ 推送完成' : '✅ 完成')
+        return formatCommandReply(session, verboseLog ? '✅ 被动消息推送完成' : '✅ 完成')
       } catch (error) {
-        logger.error(`手动推送失败:`, error)
+        logger.error(`❌ 被动消息推送失败:`, error)
         return formatCommandReply(session, `❌ 推送失败: ${(error as Error).message || String(error)}`)
       }
     })
 
-  ctx.command('git-monitor.dryrun', '使用硬编码假数据推送用于调试渲染')
+  ctx.command('git-monitor.dryrun', '使用硬编码假数据测试被动消息推送和渲染')
     .option('count', '-n <count:number> 假数据仓库数量（1-30）', { fallback: 15 })
     .action(async ({ session, options }) => {
       const rawCount = typeof options?.count === 'number' ? options.count : Number(options?.count)
@@ -247,13 +250,13 @@ export function apply(ctx: Context, config: Config) {
 
       try {
         if (verboseLog && session) {
-          await session.send(formatCommandReply(session, `🧪 Dry-run: 使用硬编码示例推送（${count} 个仓库）...`))
+          await session.send(formatCommandReply(session, `🧪 Dry-run: 使用硬编码示例触发被动消息推送（${count} 个仓库）...`))
         }
         await pushScheduler.triggerDryRun(count, { quoteContext })
-        return formatCommandReply(session, verboseLog ? `✅ Dry-run 推送完成（${count} 个示例仓库）` : '✅ 完成')
+        return formatCommandReply(session, verboseLog ? `✅ Dry-run 被动消息推送完成（${count} 个示例仓库）` : '✅ 完成')
       } catch (error) {
-        logger.error(`Dry-run 推送失败:`, error)
-        return formatCommandReply(session, `❌ Dry-run 推送失败: ${(error as Error).message || String(error)}`)
+        logger.error(`❌ Dry-run 被动消息推送失败:`, error)
+        return formatCommandReply(session, `❌ Dry-run 被动消息推送失败: ${(error as Error).message || String(error)}`)
       }
     })
 
@@ -283,7 +286,7 @@ export function apply(ctx: Context, config: Config) {
         }
         
         lines.push(`  📊 仓库总数: ${group.repos.length}`)
-        lines.push(`  ⏰ 轮询: ${group.pollCron} | 推送: ${group.pushCron}\n`)
+        lines.push(`  ⏰ 轮询: ${group.pollCron} | 主动消息: ${group.pushCron}\n`)
       }
       
       return formatCommandReply(session, lines.join('\n'))
@@ -347,7 +350,7 @@ export function apply(ctx: Context, config: Config) {
       lines.push(`📦 ${group} → [${targets || '无推送目标'}]`)
       lines.push(`✅ 状态: ${monitorGroup.enabled !== false ? '启用' : '已禁用'}`)
       lines.push(`📊 仓库总数: ${totalRepos}`)
-      lines.push(`⏰ 轮询: ${monitorGroup.pollCron} | 推送: ${monitorGroup.pushCron}\n`)
+      lines.push(`⏰ 轮询: ${monitorGroup.pollCron} | 主动消息: ${monitorGroup.pushCron}\n`)
 
       lines.push(`📂 仓库列表 (第 ${clampedPage}/${totalPages} 页):`)
       for (let i = 0; i < pagedRepos.length; i++) {
@@ -439,7 +442,7 @@ export function apply(ctx: Context, config: Config) {
           const result = await discoverer.syncDiscoverGroup(groupName)
           syncMsg = `\n已同步仓库列表: 新增 ${result.added} 个仓库`
         } catch (error) {
-          logger.error(`同步失败:`, error)
+          logger.error(`❌ 同步失败:`, error)
           syncMsg = `\n⚠️ 首次同步失败: ${(error as Error).message}`
         }
       }
@@ -450,7 +453,7 @@ export function apply(ctx: Context, config: Config) {
         pollScheduler.start(mg)
         pushScheduler.start(mg)
       } catch (error) {
-        logger.error(`启动新监控组调度器失败 ${groupName}:`, error)
+        logger.error(`❌ 启动新监控组调度器失败 ${groupName}:`, error)
       }
 
       return formatCommandReply(session,
@@ -458,13 +461,13 @@ export function apply(ctx: Context, config: Config) {
         + `\n└─ 🌐 来源: ${sourceSummary}`
         + (syncMsg ? `\n└─ 📦 ${syncMsg.replace(/^[\s\n]*/, '')}` : '')
         + `\n\n使用:`
-        + `\n  🚀 \`git-monitor.push ${groupName} -m last\`  → 立即推送查看效果`
+        + `\n  🚀 \`git-monitor.push ${groupName} -m last\`  → 立即触发被动消息推送查看效果`
         + `\n  📋 \`git-monitor.discover ... --no-sync\`  → 仅创建，不同步`)
     })
 
   // ============ 清理任务 ============
   ctx.on('dispose', () => {
-    logger.info('停止 Git 仓库监控插件')
+    logger.info('🛑 停止 Git 仓库监控插件')
     pollScheduler.stopAll()
     pushScheduler.stopAll()
   })
@@ -472,10 +475,10 @@ export function apply(ctx: Context, config: Config) {
   // 定期清理旧记录（每天执行一次）
   ctx.setInterval(() => {
     storage.cleanOldRecords(30).catch(error => {
-      logger.error('清理旧记录失败:', error)
+      logger.error('❌ 清理旧记录失败:', error)
     })
   }, 24 * 60 * 60 * 1000)
 
-  logger.info('Git 仓库监控插件已加载')
+  logger.info('✅ Git 仓库监控插件已加载')
 }
 

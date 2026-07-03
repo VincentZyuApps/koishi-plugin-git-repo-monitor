@@ -1,10 +1,12 @@
 import { Schema } from 'koishi'
+import { DEFAULT_LXGW_WENKAI_PATH } from './utils/fonts'
 
 const exampleRepoList: Array<{ url: string; branch: string; type: 'commits' | 'releases' }> = [
   // 🌐 操作系统内核 & 发行版 & 包管理
   { url: 'https://github.com/torvalds/linux', branch: 'master', type: 'commits' },
   { url: 'https://github.com/archlinux/linux', branch: 'master', type: 'commits' },
-  { url: 'https://github.com/debian/dpkg', branch: 'main', type: 'commits' },
+  { url: 'https://github.com/guillemj/dpkg', branch: 'main', type: 'commits' },
+  { url: 'https://github.com/Debian/apt', branch: 'main', type: 'commits' },
   // 🦊 编程语言 & 运行时
   { url: 'https://github.com/python/cpython', branch: 'main', type: 'commits' },
   { url: 'https://github.com/nodejs/node', branch: 'main', type: 'commits' },
@@ -129,10 +131,10 @@ export const MonitorGroupSchema = Schema.object({
     .description('📂 监听的仓库列表'),
   pollCron: Schema.string()
     .default('0 * * * *')
-    .description('轮询 Cron 表达式（检查更新频率）<br/>📌 常用示例：<br/>• `* * * * *` - 每分钟<br/>• `*/5 * * * *` - 每 5 分钟<br/>• `*/10 * * * *` - 每 10 分钟<br/>• `*/30 * * * *` - 每 30 分钟<br/>• `0 * * * *` - 每小时（整点）'),
+    .description('轮询 Cron 表达式（检查更新频率；发现的新更新会加入待推送队列，不直接发送）<br/>📌 常用示例：<br/>• `* * * * *` - 每分钟<br/>• `*/5 * * * *` - 每 5 分钟<br/>• `*/10 * * * *` - 每 10 分钟<br/>• `*/30 * * * *` - 每 30 分钟<br/>• `0 * * * *` - 每小时（整点）'),
   pushCron: Schema.string()
     .default('0 */12 * * *')
-    .description('推送 Cron 表达式（推送通知频率）<br/>📌 常用示例：<br/>• `0 * * * *` - 每小时（整点）<br/>• `0 */2 * * *` - 每 2 小时<br/>• `0 */6 * * *` - 每 6 小时<br/>• `0 */12 * * *` - 每 12 小时<br/>• `0 0 * * *` - 每天 0:00'),
+    .description('主动消息推送 Cron 表达式（Bot 定时主动发送待推送队列的频率）<br/>📌 常用示例：<br/>• `0 * * * *` - 每小时（整点）<br/>• `0 */2 * * *` - 每 2 小时<br/>• `0 */6 * * *` - 每 6 小时<br/>• `0 */12 * * *` - 每 12 小时<br/>• `0 0 * * *` - 每天 0:00'),
   enabled: Schema.boolean()
     .default(true)
     .description('✅ 是否启用此监控组'),
@@ -163,7 +165,7 @@ export const DiscoverGroupSchema = Schema.object({
     .description('📑 来源列表（GitHub/Gitee 用户或组织）'),
   syncRepos: Schema.boolean()
     .default(true)
-    .description('🔄 每次轮询/推送前同步仓库列表（新增/移除的仓库自动更新）'),
+    .description('🔄 每次轮询、主动消息推送或被动消息推送前同步仓库列表（新增/移除的仓库自动更新）'),
 }).description('🔄 动态发现组配置<br/><br/>🔗 <b>pushTargets / pollCron / pushCron / enabled</b> 请在对应的「监控组列表」条目中配置，发现组通过 <b>name</b> 与监控组关联。')
 
 /**
@@ -210,13 +212,13 @@ export interface Config {
   /** 并行获取仓库数量（设为 1 则串行获取） */
   parallelFetchCount: number
 
-  // ========== ⏰ 被动定时推送配置 ==========
+  // ========== ⏰ 主动消息（定时推送）配置 ==========
   /** 监控组列表 */
   monitorGroups: any[]
   /** 每个仓库每次推送最多显示的更新条数 */
   maxUpdatesPerRepo: number
-  /** 被动消息触发的输出形式 */
-  passiveOutputModes: OutputMode[]
+  /** 主动消息输出形式：Bot 按 pushCron 定时主动推送 */
+  activeOutputModes: OutputMode[]
   /** 插件启动时是否立即执行一次轮询检查 */
   immediatePollOnStart: boolean
 
@@ -224,9 +226,9 @@ export interface Config {
   /** 动态发现组列表 */
   discoverGroups: any[]
 
-  // ========== 👋 主动指令触发配置 ==========
-  /** 主动推送触发的输出形式 */
-  activeOutputModes: OutputMode[]
+  // ========== 💬 被动消息（指令触发）配置 ==========
+  /** 被动消息输出形式：用户执行 git-monitor.push / dryrun 指令时使用 */
+  passiveOutputModes: OutputMode[]
   /** 指令触发的回复是否引用原消息 */
   quoteCommandReplies: boolean
   /** push 指令的推送目标选择 */
@@ -238,8 +240,14 @@ export interface Config {
   /** 单仓库请求超时（毫秒） */
   repoFetchTimeout: number
 
+  // ========== 🔡 字体下载配置 ==========
+  /** 是否自动下载默认字体 */
+  enableFontDownload: boolean
+  /** 默认字体路径 */
+  fontPath: string
+
   // ========== 🧩 Typst 渲染配置 ==========
-  /** Typst 字体路径 */
+  /** Typst 字体路径覆盖 */
   typstFontPath: string
   /** Typst 是否启用深色模式 */
   typstDarkMode: boolean
@@ -251,7 +259,7 @@ export interface Config {
   typstLogoType: 'svg' | 'emoji'
 
   // ========== 🖼️ Puppeteer 渲染配置 ==========
-  /** Puppeteer 字体路径 */
+  /** Puppeteer 字体路径覆盖 */
   puppeteerFontPath: string
   /** Puppeteer 是否启用深色模式 */
   puppeteerDarkMode: boolean
@@ -321,7 +329,7 @@ export const Config: Schema<Config> = Schema.intersect([
       .description('📊 是否显示代码行数变化统计（+/-），适用于所有输出模式（文字/图片/转发），可能会增加 API 请求耗时'),
     silentStart: Schema.boolean()
       .default(true)
-      .description('🤫 静默启动（首次运行不推送）。⚠️ 若设为 false，插件启动时可能会将新添加仓库的当前状态视为更新并推送，导致消息刷屏。'),
+      .description('🤫 静默启动（首次运行不加入待推送队列）。⚠️ 若设为 false，插件启动时可能会将新添加仓库的当前状态视为更新并加入待推送队列，随后由主动消息或被动消息发送。'),
     parallelFetchCount: Schema.number()
       .min(1)
       .max(1024)
@@ -368,13 +376,13 @@ export const Config: Schema<Config> = Schema.intersect([
       .max(99)
       .default(1)
       .description('🗂️ 每个仓库每次推送最多显示的更新条数（如 Chromium 等频繁更新的仓库，可限制只推送最新的 n 条）'),
-    passiveOutputModes: createOutputModeSchema(['text', 'puppeteer-image', 'typst-image', 'forward'])
+    activeOutputModes: createOutputModeSchema(['text', 'puppeteer-image', 'typst-image', 'forward'])
       .default(['puppeteer-image', 'forward'])
-      .description('📤 定时推送时的输出形式（可多选）'),
+      .description('📤 主动消息输出形式：Bot 按 pushCron 定时主动推送时使用（可多选）'),
     immediatePollOnStart: Schema.boolean()
       .default(false)
       .description('⏯️ 插件启动时是否立即执行一次轮询检查'),
-  }).description('⏰ 被动定时推送配置'),
+  }).description('⏰ 主动消息（定时推送）配置'),
 
   Schema.object({
     discoverGroups: Schema.array(DiscoverGroupSchema)
@@ -384,9 +392,9 @@ export const Config: Schema<Config> = Schema.intersect([
   }).description('🔎 动态发现分组设置'),
 
   Schema.object({
-    activeOutputModes: createOutputModeSchema(['text', 'puppeteer-image', 'typst-image', 'forward'])
+    passiveOutputModes: createOutputModeSchema(['text', 'puppeteer-image', 'typst-image', 'forward'])
       .default(['puppeteer-image', 'forward'])
-      .description('📤 指令触发时的输出形式（可多选）'),
+      .description('📤 被动消息输出形式：用户执行 git-monitor.push / dryrun 指令时使用（可多选）'),
     quoteCommandReplies: Schema.boolean()
       .default(true)
       .description('💬 是否引用触发消息发送回复（onebot forward 合并转发 输出不支持引用）'),
@@ -400,7 +408,7 @@ export const Config: Schema<Config> = Schema.intersect([
       .description('🎯 git-monitor.push 指令的推送目标选择'),
     defaultPushMode: Schema.union([
       Schema.const('last').description('🔄 last：强制推送所有仓库的最新状态（无论是否有新更新）'),
-      Schema.const('new') .description('✨ new：仅推送自上次检查以来的新增更新'),
+      Schema.const('new') .description('✨ new：仅推送当前待推送队列中的新增更新，不重新拉取所有仓库'),
     ])
       .role('radio')
       .default('last')
@@ -414,13 +422,23 @@ export const Config: Schema<Config> = Schema.intersect([
       .role('radio')
       .default('time-desc')
       .description('📊 仓库卡片排序方式'),
-  }).description('👋 主动指令触发配置'),
+  }).description('💬 被动消息（指令触发）配置'),
+
+  Schema.object({
+    enableFontDownload: Schema.boolean()
+      .default(true)
+      .description('📥 是否自动下载默认字体 LXGWWenKaiMono-Regular.ttf<br/><i>开启后会下载到 ctx.baseDir/data/fonts，并校验 size + md5 + sha1 + sha256 + sha512；下载顺序为 Gitee release 优先，失败后 fallback 到 GitHub release。</i>'),
+    fontPath: Schema.string()
+      .default(DEFAULT_LXGW_WENKAI_PATH)
+      .role('textarea', { rows: [2, 5] })
+      .description('🔡 默认字体路径（推荐 LXGW WenKai Mono）<br/><i>配置页默认展示 process.cwd()/data/fonts/LXGWWenKaiMono-Regular.ttf；运行时会自动映射到 ctx.baseDir/data/fonts/LXGWWenKaiMono-Regular.ttf。用户自定义绝对路径会原样使用，相对路径会基于 ctx.baseDir 解析。</i>'),
+  }).description('🔡 字体下载配置'),
 
   Schema.object({
     typstFontPath: Schema.string()
-      .default('/home/bawuyinguo/SSoftwareFiles/fonts/LXGWWenKaiMono-Medium.ttf')
+      .default('')
       .role('textarea', { rows: [2, 5] })
-      .description('🔡 Typst 字体文件绝对路径（推荐使用 LXGW WenKai Mono）'),
+      .description('🔡 Typst 字体路径覆盖（可选，留空则使用上方「默认字体路径」）'),
     typstDarkMode: Schema.boolean()
       .default(false)
       .experimental()
@@ -446,8 +464,9 @@ export const Config: Schema<Config> = Schema.intersect([
 
   Schema.object({
     puppeteerFontPath: Schema.string()
-      .default('/home/bawuyinguo/SSoftwareFiles/fonts/LXGWWenKaiMono-Medium.ttf')
-      .description('🔡 Puppeteer 字体文件绝对路径（可选，留空则使用默认字体）'),
+      .default('')
+      .role('textarea', { rows: [2, 5] })
+      .description('🔡 Puppeteer 字体路径覆盖（可选，留空则使用上方「默认字体路径」）'),
     puppeteerDarkMode: Schema.boolean()
       .default(true)
       .description('🌓 Puppeteer 启用深色模式（推荐，视觉效果更佳）'),
@@ -579,7 +598,7 @@ export const Config: Schema<Config> = Schema.intersect([
       .description('🐛 启用调试日志'),
     verboseSessionLog: Schema.boolean()
       .default(true)
-      .description('🗒️ 会话内输出详细提示（如 "开始推送""推送完成"）'),
+      .description('🗒️ 会话内输出详细提示（如 "开始被动消息推送""被动消息推送完成"）'),
     verboseFileLog: Schema.boolean()
       .default(false)
       .description('📝 开启后将最后一次渲染的图片输出到 /log/ 目录（方便调试）'),

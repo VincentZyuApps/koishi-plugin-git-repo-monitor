@@ -13,25 +13,32 @@ export const usage = `
 
 可选依赖（按需使用）：
 
-- **to-image-service + w-node** - Typst 图片渲染
+- **to-image-service >= 0.1.5 + w-node >= 2.0.0** - Typst 图片渲染（Typst 编译器固定使用 \`@myriaddreamin/typst-ts-node-compiler@0.7.0\`）
 - **puppeteer** - Puppeteer 图片渲染
 - **onebot** - 合并转发（forward）
 
 ### 🎯 功能特性
 
 - 🔄 多仓库监控（支持 GitHub、Gitee 等）
-- ⏰ 灵活的定时任务（独立配置轮询和推送间隔）
+- ⏰ 灵活的定时任务（独立配置轮询和主动消息推送间隔）
 - 🎨 精美的 Typst 渲染卡片
 - 📢 多平台推送支持
 - 💾 自动保存检查点和推送记录
+- 💬 按 QQ 官方 Bot 语境区分主动消息和被动消息
 
 ### 📝 使用说明
 
-1. 配置字体路径（推荐使用 LXGW WenKai Mono）
+1. 使用默认自动下载字体，或按需覆盖字体路径（推荐使用 LXGW WenKai Mono）
 2. 添加监控组，配置仓库列表和 Cron 表达式
-3. 启用插件后会自动开始监控和推送
+3. 启用插件后会按 <code>pollCron</code> 检查更新并入队，按 <code>pushCron</code> 发送主动消息
 
 <p><b>🤖 Bot 选择：</b>推送目标目前不单独配置 <code>selfId</code>。默认 <code>useFirstBotWhenSelfIdEmpty=true</code>，同平台 Bot 会逐个尝试，首个成功即停止；关闭后会对所有同平台 Bot 发送，可能造成重复通知。</p>
+
+<p><b>📦 内置资源目录：</b>插件启动时会自动把内置 <code>assets</code> 复制到 <code>ctx.baseDir/data/assets/git-repo-monitor</code>，Puppeteer 与 Typst 渲染会优先读取该目录；无需额外配置。</p>
+
+<p><b>🔡 字体下载：</b>默认开启 <code>enableFontDownload</code>，插件会把 <code>LXGWWenKaiMono-Regular.ttf</code> 下载到 <code>ctx.baseDir/data/fonts</code>。下载顺序为 Gitee release 优先，失败后 fallback 到 GitHub release；下载完成后校验 <code>size + md5 + sha1 + sha256 + sha512</code>。配置页里的默认 <code>fontPath</code> 展示为 <code>process.cwd()/data/fonts/LXGWWenKaiMono-Regular.ttf</code>，运行时会自动映射到 <code>ctx.baseDir/data/fonts/LXGWWenKaiMono-Regular.ttf</code>。</p>
+
+<p><b>💬 主动消息与被动消息：</b>本插件按 QQ 官方 Bot 语境区分：<code>active</code> 是 Bot 不依赖当前用户指令、按 <code>pushCron</code> 定时发送的主动消息，使用 <code>activeOutputModes</code>；<code>passive</code> 是用户执行 <code>git-monitor.push</code> / <code>git-monitor.dryrun</code> 指令触发的被动消息，使用 <code>passiveOutputModes</code>。<code>pollCron</code> 只负责检查仓库更新并加入待推送队列，不直接发送消息。</p>
 
 ### 🔧 命令列表
 
@@ -47,7 +54,7 @@ export const usage = `
 </tr>
 <tr>
   <td><code>git-monitor.check &lt;组名&gt;</code></td>
-  <td>手动触发检查</td>
+  <td>指令触发检查<br>发现的新更新会加入待推送队列，不会立即发送</td>
   <td><code>git-monitor.check qwq</code></td>
 </tr>
 <tr>
@@ -59,7 +66,7 @@ export const usage = `
 </tr>
 <tr>
   <td><code>git-monitor.dryrun [-n count]</code></td>
-  <td>使用硬编码假数据测试推送<br>
+  <td>使用硬编码假数据测试被动消息推送与渲染<br>
   • <code>-n &lt;数量&gt;</code>: 指定仓库数量 (1-30)<br>
   • 默认 15 个仓库</td>
   <td><code>git-monitor.dryrun</code><br><code>git-monitor.dryrun -n 20</code></td>
@@ -81,9 +88,10 @@ export const usage = `
 </tr>
 <tr>
   <td><code>git-monitor.push &lt;组名&gt; [-m mode]</code></td>
-  <td>手动触发推送<br>
-  • <code>-m new</code> (默认): 仅推送新更新<br>
-  • <code>-m last</code>: 强制推送最新状态</td>
+  <td>触发一次被动消息推送<br>
+  • 未指定 <code>-m</code> 时使用 <code>defaultPushMode</code>（默认 <code>last</code>）<br>
+  • <code>-m new</code>: 发送当前待推送队列，不重新拉取所有仓库<br>
+  • <code>-m last</code>: 即时拉取所有仓库最新状态并发送</td>
   <td><code>git-monitor.push qwq</code><br><code>git-monitor.push qwq -m last</code></td>
 </tr>
 </tbody>
@@ -128,8 +136,8 @@ export const usage = `
 <li><b>基准获取</b>：从 <code>git_repo_state</code> 表读取 <code>lastCheckpoint</code></li>
 <li><b>API 请求</b>：向 GitHub/Gitee API 传递 <code>since</code> 参数</li>
 <li><b>精准过滤</b>：过滤掉时间 &lt;= 检查点的提交</li>
-<li><b>状态更新</b>：推送后更新最新 Commit 时间戳到数据库</li>
-<li><b>Silent Start</b>：首次运行默认不推送，仅记录 Checkpoint</li>
+<li><b>状态更新</b>：检查阶段确认新更新后更新最新 Commit 时间戳到数据库，并加入待推送队列</li>
+<li><b>Silent Start</b>：首次运行默认不加入待推送队列，仅记录 Checkpoint</li>
 </ol>
 
 

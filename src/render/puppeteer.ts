@@ -4,6 +4,9 @@ import path from 'node:path'
 import { Config } from '../config'
 import { RepoUpdate, PLUGIN_REPO_URL } from '../types'
 import { formatTimestamp, formatDateTime } from '../utils/format'
+import { ensurePluginAssets } from '../utils/assets'
+import { resolveRuntimeFontPath } from '../utils/fonts'
+import { createConsoleLogger } from '../utils/logger'
 
 function escapeHtml(text: string) {
   return text
@@ -494,28 +497,34 @@ function buildHtml(updates: RepoUpdate[], groupName: string, config: Config, ico
 }
 
 export async function renderPuppeteerImage(ctx: Context, config: Config, updates: RepoUpdate[], groupName: string): Promise<Buffer | null> {
+  const logger = ctx.logger('git-monitor:🖼️puppeteer')
+  const log = createConsoleLogger(logger, () => config.verboseConsoleLog)
+
   if (!ctx.puppeteer) {
-    ctx.logger('git-monitor').warn('Puppeteer 不可用，跳过 Puppeteer 图片渲染')
+    logger.warn('⚠️ Puppeteer 不可用，跳过 Puppeteer 图片渲染')
     return null
   }
 
-  const assetsDir = path.resolve(__dirname, '../../assets')
+  const assetsDir = ensurePluginAssets(ctx, config.verboseConsoleLog)
   const icons: IconMap = {}
   try {
     const githubSvg = fs.readFileSync(path.join(assetsDir, 'github.svg'), 'utf-8')
     icons.github = `data:image/svg+xml;base64,${Buffer.from(githubSvg).toString('base64')}`
+    log.debug(`🖼️ 已加载 GitHub SVG Logo: ${path.join(assetsDir, 'github.svg')}`)
   } catch {}
   try {
     const giteeSvg = fs.readFileSync(path.join(assetsDir, 'gitee.svg'), 'utf-8')
     icons.gitee = `data:image/svg+xml;base64,${Buffer.from(giteeSvg).toString('base64')}`
+    log.debug(`🖼️ 已加载 Gitee SVG Logo: ${path.join(assetsDir, 'gitee.svg')}`)
   } catch {}
 
   let fontCss = ''
-  if (config.puppeteerFontPath && fs.existsSync(config.puppeteerFontPath)) {
+  const puppeteerFontPath = resolveRuntimeFontPath(ctx, config.puppeteerFontPath || config.fontPath)
+  if (puppeteerFontPath && fs.existsSync(puppeteerFontPath)) {
     try {
-      const fontData = fs.readFileSync(config.puppeteerFontPath)
+      const fontData = fs.readFileSync(puppeteerFontPath)
       const fontBase64 = fontData.toString('base64')
-      const ext = path.extname(config.puppeteerFontPath).replace('.', '').toLowerCase()
+      const ext = path.extname(puppeteerFontPath).replace('.', '').toLowerCase()
       const formatMap: Record<string, string> = {
         ttf: 'truetype',
         ttc: 'truetype',
@@ -533,6 +542,7 @@ export async function renderPuppeteerImage(ctx: Context, config: Config, updates
       const fontFormat = formatMap[ext] || 'truetype'
       const fontMime = mimeMap[ext] || 'font/ttf'
       fontCss = `@font-face { font-family: "LXGW WenKai Mono"; src: url(data:${fontMime};base64,${fontBase64}) format("${fontFormat}"); font-display: swap; font-weight: 400; font-style: normal; }`
+      log.debug(`🔡 已内联 Puppeteer 字体: ${puppeteerFontPath}`)
     } catch {}
   }
 
@@ -545,6 +555,7 @@ export async function renderPuppeteerImage(ctx: Context, config: Config, updates
   const layoutMode = config.puppeteerLayoutMode || 'masonry'
   const masonryEnabled = layoutMode === 'masonry' && colCount > 1
   const needGreedyReflow = config.puppeteerMasonryGreedy !== false && masonryEnabled
+  log.debug(`🖼️ Puppeteer 开始渲染: group=${groupName}, updates=${updates.length}, layout=${layoutMode}, columns=${colCount}, scale=${viewportScale}`)
 
   try {
     let cardHeights: number[] | undefined
@@ -552,6 +563,7 @@ export async function renderPuppeteerImage(ctx: Context, config: Config, updates
     // 如果需要贪心重排，先渲染一次获取各卡片高度
     if (needGreedyReflow) {
       const initialHtml = buildHtml(updates, groupName, config, icons, fontCss)
+      log.debug(`🧮 Puppeteer 瀑布流预渲染，HTML 长度: ${initialHtml.length}`)
       
       await page.setViewport({
         width: viewportWidth,
@@ -575,10 +587,12 @@ export async function renderPuppeteerImage(ctx: Context, config: Config, updates
         })
         return items.map(item => item.getBoundingClientRect().height)
       })
+      log.debug(`🧮 Puppeteer 已获取 ${cardHeights.length} 个卡片高度`)
     }
 
     // 用获取的高度（如果有）生成最终 HTML
     const html = buildHtml(updates, groupName, config, icons, fontCss, cardHeights)
+    log.debug(`🖼️ Puppeteer 最终 HTML 长度: ${html.length}`)
 
     await page.setViewport({
       width: viewportWidth,
@@ -607,6 +621,7 @@ export async function renderPuppeteerImage(ctx: Context, config: Config, updates
       width: Math.ceil(box.width),
       height: Math.ceil(box.height),
     }
+    log.debug(`📐 Puppeteer 截图区域: ${JSON.stringify(clip)}`)
 
     await page.setViewport({
       width: Math.ceil(clip.x + clip.width),
@@ -626,6 +641,7 @@ export async function renderPuppeteerImage(ctx: Context, config: Config, updates
     })
 
     const resultBuffer = Buffer.from(buffer as unknown as ArrayBuffer)
+    log.debug(`✅ Puppeteer 截图完成: ${resultBuffer.length} bytes, type=${imageType}`)
 
     // 文件日志输出
     if (config.verboseFileLog) {
@@ -642,6 +658,7 @@ export async function renderPuppeteerImage(ctx: Context, config: Config, updates
  * 保存 Puppeteer 图片到文件（用于调试）
  */
 async function savePuppeteerImageToFile(buffer: Buffer, groupName: string, ctx: Context): Promise<void> {
+  const logger = ctx.logger('git-monitor:🖼️puppeteer')
   try {
     const fs = await import('fs/promises')
     const path = await import('path')
@@ -658,8 +675,8 @@ async function savePuppeteerImageToFile(buffer: Buffer, groupName: string, ctx: 
     const filePath = path.join(logDir, 'puppeteer.latest.png')
     await fs.writeFile(filePath, buffer)
     
-    ctx.logger('git-monitor').info(`已保存 ${groupName} 的 Puppeteer 图片到: ${filePath}`)
+    logger.info(`📝 已保存 ${groupName} 的 Puppeteer 图片到: ${filePath}`)
   } catch (error) {
-    ctx.logger('git-monitor').warn(`保存 Puppeteer 图片文件失败: ${(error as Error).message}`)
+    logger.warn(`⚠️ 保存 Puppeteer 图片文件失败: ${(error as Error).message}`)
   }
 }
